@@ -11,20 +11,18 @@
 
 
 /* create a new thread */
-int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, 
-                      void *(*function)(void*), void * arg) {
-       // Create Thread Control Block
-       // Create and initialize the context of this thread
-       // Allocate space of stack for this thread to run
-       // after everything is all set, push this thread int
-       // YOUR CODE HERE
+int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
+	// Create Thread Control Block
+	// Create and initialize the context of this thread
+	// Allocate space of stack for this thread to run
+	// after everything is all set, push this thread int
+	// YOUR CODE HERE
 	
-    return 0;
+	return 0;
 };
 
 /* give CPU possession to other user-level threads voluntarily */
 int rpthread_yield() {
-	
 	// Change thread state from Running to Ready
 	// Save context of this thread to its thread control block
 	// switch from thread context to scheduler context
@@ -43,17 +41,15 @@ void rpthread_exit(void *value_ptr) {
 
 /* Wait for thread termination */
 int rpthread_join(rpthread_t thread, void **value_ptr) {
-	
 	// Wait for a specific thread to terminate
 	// De-allocate any dynamic memory created by the joining thread
-  
+
 	// YOUR CODE HERE
 	return 0;
 };
 
 /* initialize the mutex lock */
-int rpthread_mutex_init(rpthread_mutex_t *mutex, 
-                          const pthread_mutexattr_t *mutexattr) {
+int rpthread_mutex_init(rpthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr) {
 	//Initialize data structures for this mutex
 
 	// YOUR CODE HERE
@@ -62,13 +58,13 @@ int rpthread_mutex_init(rpthread_mutex_t *mutex,
 
 /* aquire the mutex lock */
 int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
-        // use the built-in test-and-set atomic function to test the mutex
-        // When the mutex is acquired successfully, enter the critical section
-        // If acquiring mutex fails, push current thread into block list and 
-        // context switch to the scheduler thread
+	// use the built-in test-and-set atomic function to test the mutex
+	// When the mutex is acquired successfully, enter the critical section
+	// If acquiring mutex fails, push current thread into block list and 
+	// context switch to the scheduler thread
 
-        // YOUR CODE HERE
-        return 0;
+	// YOUR CODE HERE
+	return 0;
 };
 
 /* release the mutex lock */
@@ -105,12 +101,12 @@ static void schedule() {
 
 	// YOUR CODE HERE
 
-// schedule policy
-#ifndef MLFQ
+	// schedule policy
+	#ifndef MLFQ
 	// Choose STCF
-#else 
+	#else 
 	// Choose MLFQ
-#endif
+	#endif
 
 }
 

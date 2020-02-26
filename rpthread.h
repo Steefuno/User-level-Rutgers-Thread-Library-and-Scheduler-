@@ -49,8 +49,7 @@ typedef struct rpthread_mutex_t {
 /* Function Declarations: */
 
 /* create a new thread */
-int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void
-    *(*function)(void*), void * arg);
+int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg);
 
 /* give CPU pocession to other user level threads voluntarily */
 int rpthread_yield();
@@ -62,8 +61,7 @@ void rpthread_exit(void *value_ptr);
 int rpthread_join(rpthread_t thread, void **value_ptr);
 
 /* initial the mutex lock */
-int rpthread_mutex_init(rpthread_mutex_t *mutex, const pthread_mutexattr_t
-    *mutexattr);
+int rpthread_mutex_init(rpthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr);
 
 /* aquire the mutex lock */
 int rpthread_mutex_lock(rpthread_mutex_t *mutex);
