@@ -9,7 +9,6 @@
 // INITAILIZE ALL YOUR VARIABLES HERE
 // YOUR CODE HERE
 
-
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
 	// Create Thread Control Block

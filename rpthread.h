@@ -24,27 +24,39 @@ typedef uint rpthread_t;
 typedef struct threadControlBlock {
 	/* add important states in a thread control block */
 	// thread Id
+	int id;
 	// thread status
+	int status;
 	// thread context
+	ucontext_t context;
 	// thread stack
+	void* stack;
 	// thread priority
-	// And more ...
+	int priority;
 
-	// YOUR CODE HERE
+	// ...
 } tcb; 
 
 /* mutex struct definition */
 typedef struct rpthread_mutex_t {
-	/* add something here */
+	// thread that locked this mutex
+	// NULL if unlocked
+	tcb* thread;
 
-	// YOUR CODE HERE
+	// ...
 } rpthread_mutex_t;
 
-/* define your data structures here: */
+tcb* schedulerBlock;
+
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
 
-// YOUR CODE HERE
-
+//Linked List
+typedef struct rpthread_listItem_t {
+	tcb* thread;
+	struct rpthread_listItem_t* next;
+} rpthread_listItem_t;
+rpthread_listItem_t* rpthread_threadList; //Used in PSJF
+rpthread_listItem_t* rpthread_MLFQ[]; //rpthread_MLFQ[0] is top level, used in MLFQ scheduling
 
 /* Function Declarations: */
 
@@ -82,6 +94,12 @@ int rpthread_mutex_destroy(rpthread_mutex_t *mutex);
 #define pthread_mutex_lock rpthread_mutex_lock
 #define pthread_mutex_unlock rpthread_mutex_unlock
 #define pthread_mutex_destroy rpthread_mutex_destroy
+
+//Thread States
+#define READY 1
+#define SCHEDULED 2
+#define BLOCKED 3
+
 #endif
 
 #endif
