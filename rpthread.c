@@ -12,7 +12,7 @@ int nextThreadId = 0;
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
 	// Initialize scheduler if NULL
-	if (schedulerContext == NULL) _initScheduler();
+	if (schedulerContext == NULL) initScheduler();
 
 	// Create Thread Control Block
 	tcb* threadBlock = (tcb*)malloc(sizeof(tcb));
@@ -142,7 +142,7 @@ static void sched_mlfq() {
 }
 
 /* Setup scheduler context */
-void _initScheduler () {
+void initScheduler () {
 	if (schedulerContext != NULL) return;
 
 	schedulerContext = (ucontext_t*)malloc(sizeof(ucontext_t));

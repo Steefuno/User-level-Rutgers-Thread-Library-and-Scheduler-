@@ -85,8 +85,14 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex);
 /* destroy the mutex */
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex);
 
+/* scheduler */
+static void schedule();
+
 /* initialize scheduler */
-void _initScheduler();
+void initScheduler();
+
+/* adds a thread control block into the scheduling queue as READY */
+void insertIntoScheduler(tcb* threadBlock);
 
 #ifdef USE_RTHREAD
 #define pthread_t rpthread_t
