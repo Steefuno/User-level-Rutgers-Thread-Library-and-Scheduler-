@@ -23,7 +23,7 @@ typedef uint rpthread_t;
 
 typedef struct threadControlBlock {
 	/* add important states in a thread control block */
-	// thread Id
+	// thread id
 	int id;
 	// thread status
 	int status;
@@ -46,7 +46,8 @@ typedef struct rpthread_mutex_t {
 	// ...
 } rpthread_mutex_t;
 
-tcb* schedulerBlock;
+/* Context to swap to to use scheduler */
+ucontext_t* schedulerContext;
 
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
 
@@ -84,6 +85,9 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex);
 /* destroy the mutex */
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex);
 
+/* initialize scheduler */
+void _initScheduler();
+
 #ifdef USE_RTHREAD
 #define pthread_t rpthread_t
 #define pthread_mutex_t rpthread_mutex_t
@@ -99,6 +103,11 @@ int rpthread_mutex_destroy(rpthread_mutex_t *mutex);
 #define READY 1
 #define SCHEDULED 2
 #define BLOCKED 3
+
+//Constants
+//Probably need to change Stack Size
+#define THREADSTACKSIZE 8192
+#define SCHEDULERSTACKSIZE 2048
 
 #endif
 

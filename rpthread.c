@@ -7,17 +7,33 @@
 #include "rpthread.h"
 
 // INITAILIZE ALL YOUR VARIABLES HERE
-// YOUR CODE HERE
+int nextThreadId = 0;
 
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
+	// Initialize scheduler if NULL
+	if (schedulerContext == NULL) _initScheduler();
+
 	// Create Thread Control Block
-	// Create and initialize the context of this thread
-	// Allocate space of stack for this thread to run
-	// after everything is all set, push this thread int
-	// YOUR CODE HERE
+	tcb* threadBlock = (tcb*)malloc(sizeof(tcb));
+	(*threadBlock).id = nextThreadId++;
+	(*threadBlock).status = READY;
+
+	//Setup context
+	ucontext_t* context = &((threadBlock*).context);
+	void* contextStack = malloc(THREADSTACKSIZE);
+
+	getcontext(context);
+	(*context).uc_stack.ss_sp = contextStack;
+	(*context).uc_stack.ss_size = THREADSTACKSIZE;
+	(*context).uc_link = schedulerContext;
+	makecontext(*context, function)
+
+	// after everything is all set, push this thread into scheduler
 	
-	return 0;
+	
+	// not sure what this should return
+	return (*threadBlock).id;
 };
 
 /* give CPU possession to other user-level threads voluntarily */
@@ -125,7 +141,20 @@ static void sched_mlfq() {
 	// YOUR CODE HERE
 }
 
-// Feel free to add any other functions you need
+/* Setup scheduler context */
+void _initScheduler () {
+	if (schedulerContext != NULL) return;
 
-// YOUR CODE HERE
+	schedulerContext = (ucontext_t*)malloc(sizeof(ucontext_t));
+
+	void* schedulerStack = malloc(SCHEDULERSTACKSIZE);
+
+	getcontext(schedulerContext);
+	(*schedulerContext).uc_stack.ss_sp = schedulerStack;
+	(*schedulerContext).uc_stack.ss_size = SCHEDULERSTACKSIZE;
+	//(*context).uc_link = ?? //Not sure what to set to appear when scheduler somehow ends
+	makecontext(*schedulerContext, schedule);
+}
+
+// Feel free to add any other functions you need
 
