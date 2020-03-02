@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef uint rpthread_t;
 
@@ -32,7 +33,7 @@ typedef struct threadControlBlock {
 	// thread stack
 	void* stack;
 	// thread priority
-	int priority;
+	int priority; //Ignore? we can be derived from where it is in queue structure
 
 	// ...
 } tcb; 
@@ -48,6 +49,9 @@ typedef struct rpthread_mutex_t {
 
 /* Context to swap to to use scheduler */
 ucontext_t* schedulerContext;
+
+/* TCB for main code */
+tcb* mainTCB;
 
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
 
@@ -114,6 +118,8 @@ void insertIntoScheduler(tcb* threadBlock);
 //Probably need to change Stack Size
 #define THREADSTACKSIZE 8192
 #define SCHEDULERSTACKSIZE 2048
+#define TICKSEC 0
+#define TICKUSEC 20000 //1000 is 1ms
 
 #endif
 

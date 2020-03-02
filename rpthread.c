@@ -8,6 +8,7 @@
 
 // INITAILIZE ALL YOUR VARIABLES HERE
 int nextThreadId = 0;
+struct itimerval schedulerTimer; //Interrupts threads if threads are too slow
 
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
@@ -29,8 +30,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	(*context).uc_link = schedulerContext;
 	makecontext(*context, function)
 
-	// after everything is all set, push this thread into scheduler
-	
+	// add new tcb into queue
 	
 	// not sure what this should return
 	return (*threadBlock).id;
@@ -154,6 +154,43 @@ void initScheduler () {
 	(*schedulerContext).uc_stack.ss_size = SCHEDULERSTACKSIZE;
 	//(*context).uc_link = ?? //Not sure what to set to appear when scheduler somehow ends
 	makecontext(*schedulerContext, schedule);
+
+	//Sets tcb to represent main
+	mainTCB = (tcb*)malloc(sizeof(tcb));
+	(*mainTCB).id = 0;
+	(*mainTCB).status = SCHEDULED;
+
+	ucontext_t* context = &((*mainTCB).context);
+	getcontext(context);
+
+	//Insert mainTCB into queue
+	insertIntoScheduler(mainTCB);
+
+	//Setup SIGVTALRM to do timerHandler
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = &timerHandler;
+	sigaction(SIGVTALRM, &sa, NULL);
+
+	//Trigger SIGVTALRM every TICKSEC + TICKUSEC
+	schedulerTimer.it_value.tv_sec = TICKSEC;
+	schedulerTimer.it_value.tv_usec = TICKUSEC;
+
+	//Start timer
+	setitimer(ITIMER_VIRTUAL, &timer, NULL);
+}
+
+void timerHandler(int sigNum) {
+	//Proceed to scheduler?
+	
+}
+
+/* adds a tcb into the scheduling queue as READY */
+void insertIntoScheduler(tcb* threadBlock) {
+	//Check type of scheduler
+	
+	//Insert to respective linked list
+	
 }
 
 // Feel free to add any other functions you need

@@ -34,6 +34,7 @@ static void scheduler(void) {
 		printf("\t%x\n", current);
 
 		//Setup timer to interrupt
+		//Setting timer during timer will reset time
 		setitimer(ITIMER_VIRTUAL, &timer, NULL);
 		//Start
 		swapcontext(&cS, current);
