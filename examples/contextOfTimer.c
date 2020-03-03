@@ -29,7 +29,7 @@ void timerHandler(int sigNum) {
 	} else {
 		current = c;
 	}
-	swapcontext(old, current);
+	swapcontext(c, current);
 	printf("Timer handler end\n");
 	//prints when swapping back to c[0], so inside main context
 }

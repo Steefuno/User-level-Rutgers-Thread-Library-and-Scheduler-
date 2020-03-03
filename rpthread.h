@@ -33,7 +33,8 @@ typedef struct threadControlBlock {
 	// thread stack
 	void* stack;
 	// thread priority
-	int priority; //Ignore? we can be derived from where it is in queue structure
+	int priority; //Ignore in MLFQ, used to show length in PSJF
+	// 
 
 	// ...
 } tcb; 
@@ -57,11 +58,11 @@ tcb* mainTCB;
 
 //Linked List
 typedef struct rpthread_listItem_t {
-	tcb* thread;
+	tcb* block;
 	struct rpthread_listItem_t* next;
 } rpthread_listItem_t;
 rpthread_listItem_t* rpthread_threadList; //Used in PSJF
-rpthread_listItem_t* rpthread_MLFQ[]; //rpthread_MLFQ[0] is top level, used in MLFQ scheduling
+rpthread_listItem_t** rpthread_MLFQ; //rpthread_MLFQ[0] is top level, used in MLFQ scheduling
 
 /* Function Declarations: */
 
@@ -95,8 +96,17 @@ static void schedule();
 /* initialize scheduler */
 void initScheduler();
 
+/* function that triggers on timer to swap to scheduler context */
+void swapToScheduler(int sigNum);
+
 /* adds a thread control block into the scheduling queue as READY */
-void insertIntoScheduler(tcb* threadBlock);
+rpthread_listItem_t* insertIntoScheduler(tcb* threadBlock);
+
+/* add into STCF scheduling queue */
+void insertIntoSTCF(rpthread_listItem_t* listItem);
+
+/* add into MLFQ scheduling queue */
+void insertIntoMLFQ(rpthread_listItem_t* listItem);
 
 #ifdef USE_RTHREAD
 #define pthread_t rpthread_t
@@ -120,6 +130,7 @@ void insertIntoScheduler(tcb* threadBlock);
 #define SCHEDULERSTACKSIZE 2048
 #define TICKSEC 0
 #define TICKUSEC 20000 //1000 is 1ms
+#define MLFQLEVELS 8
 
 #endif
 

@@ -36,13 +36,15 @@ static void scheduler(void) {
 		//Setup timer to interrupt
 		//Setting timer during timer will reset time
 		setitimer(ITIMER_VIRTUAL, &timer, NULL);
-		//Start
+
+		//Put away scheduler context and open new context
 		swapcontext(&cS, current);
 	}
 }
 void timerHandler(int sigNum) {
 	printf("TIME\n");
 	swapcontext(current, &cS);
+	//stores current context in current and goes to scheduler context
 }
 
 int main(int argc, char** argv)
@@ -87,8 +89,8 @@ int main(int argc, char** argv)
 
 	printf("%x %x %x\n", &c1, &c2, &cS);
 
-	//Start scheduler
-	swapcontext(&c0, &cS);
+	//Start scheduler and store main context in c0
+	swapcontext(&c0, &cS); 
 
 	return 0;
 }

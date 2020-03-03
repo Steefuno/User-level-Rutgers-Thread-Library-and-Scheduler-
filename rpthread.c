@@ -7,8 +7,9 @@
 #include "rpthread.h"
 
 // INITAILIZE ALL YOUR VARIABLES HERE
-int nextThreadId = 0;
-struct itimerval schedulerTimer; //Interrupts threads if threads are too slow
+int nextThreadId = 1;
+struct itimerval schedulerTimer; //Timer that interrupts threads if threads are too slow
+rethread_listItem_t* currentItem = NULL;
 
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
@@ -19,10 +20,12 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	tcb* threadBlock = (tcb*)malloc(sizeof(tcb));
 	(*threadBlock).id = nextThreadId++;
 	(*threadBlock).status = READY;
+	(*threadBlock).priority = 0; //top priority
 
 	//Setup context
 	ucontext_t* context = &((threadBlock*).context);
 	void* contextStack = malloc(THREADSTACKSIZE);
+	(*threadBlock).stack = contextStack;
 
 	getcontext(context);
 	(*context).uc_stack.ss_sp = contextStack;
@@ -31,6 +34,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	makecontext(*context, function)
 
 	// add new tcb into queue
+	insertIntoScheduler(threadBlock);
 	
 	// not sure what this should return
 	return (*threadBlock).id;
@@ -109,42 +113,51 @@ static void schedule() {
 	// Invoke different actual scheduling algorithms
 	// according to policy (STCF or MLFQ)
 
-	// if (sched == STCF)
-	//		sched_stcf();
-	// else if (sched == MLFQ)
-	// 		sched_mlfq();
-
 	// YOUR CODE HERE
 
 	// schedule policy
 	#ifndef MLFQ
-	// Choose STCF
+		// Choose STCF
+		sched_stcf();
 	#else 
-	// Choose MLFQ
+		// Choose MLFQ
+		sched_mlfq();
 	#endif
-
 }
 
 /* Preemptive SJF (STCF) scheduling algorithm */
 static void sched_stcf() {
-	// Your own implementation of STCF
-	// (feel free to modify arguments and return types)
+	// If triggered by timer
+	
+		// Get time since current started
+	
+		// Increment current's time
+	
+		// Reposition current in queue
+	
+	// If not triggered by timer, current thread has ended
+	
+		// Check joins
+	
+	// Store time when next thread start
+	
+	// Start Timer
+	setitimer(ITIMER_VIRTUAL, &timer, NULL);
 
-	// YOUR CODE HERE
+	// SetContext to first in queue
+	
 }
 
 /* Preemptive MLFQ scheduling algorithm */
 static void sched_mlfq() {
-	// Your own implementation of MLFQ
-	// (feel free to modify arguments and return types)
-
-	// YOUR CODE HERE
+	// If 
 }
 
 /* Setup scheduler context */
 void initScheduler () {
 	if (schedulerContext != NULL) return;
 
+	//Create and setup scheduler context
 	schedulerContext = (ucontext_t*)malloc(sizeof(ucontext_t));
 
 	void* schedulerStack = malloc(SCHEDULERSTACKSIZE);
@@ -152,24 +165,28 @@ void initScheduler () {
 	getcontext(schedulerContext);
 	(*schedulerContext).uc_stack.ss_sp = schedulerStack;
 	(*schedulerContext).uc_stack.ss_size = SCHEDULERSTACKSIZE;
-	//(*context).uc_link = ?? //Not sure what to set to appear when scheduler somehow ends
 	makecontext(*schedulerContext, schedule);
 
 	//Sets tcb to represent main
 	mainTCB = (tcb*)malloc(sizeof(tcb));
 	(*mainTCB).id = 0;
 	(*mainTCB).status = SCHEDULED;
+	(*mainTCB).priority = 0;
 
 	ucontext_t* context = &((*mainTCB).context);
 	getcontext(context);
-
+	(*mainTCB).stack = (*context).uc_stack.ss_sp;
+	
 	//Insert mainTCB into queue
-	insertIntoScheduler(mainTCB);
+	rpthread_listItem_t* mainListItem = insertIntoScheduler(mainTCB);
+	//Set mainTCB as current
+	currentItem = mainListItem;
 
-	//Setup SIGVTALRM to do timerHandler
+	//Setup sigaction to do timerHandler
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(sa));
-	sa.sa_handler = &timerHandler;
+	sa.sa_handler = &swapToScheduler;
+	//Setup sigaction to trigger on SIGVTALRM
 	sigaction(SIGVTALRM, &sa, NULL);
 
 	//Trigger SIGVTALRM every TICKSEC + TICKUSEC
@@ -178,20 +195,65 @@ void initScheduler () {
 
 	//Start timer
 	setitimer(ITIMER_VIRTUAL, &timer, NULL);
+
+	//Return to adding thread
+	return;
 }
 
-void timerHandler(int sigNum) {
-	//Proceed to scheduler?
-	
+void swapToScheduler(int sigNum) {
+	//Proceed to scheduler
+	proceedByTimer = 1; //Marks that scheduler was triggered by timer
+	swapcontext(&((*currentItem).context), schedulerContext);
+	//Stores current context into currentItem and swaps to scheduler
 }
 
 /* adds a tcb into the scheduling queue as READY */
-void insertIntoScheduler(tcb* threadBlock) {
+/* returns the listItem of tcb in queue */
+rpthread_listItem_t* insertIntoScheduler(tcb* threadBlock) {
+	//Create listItem
+	rpthread_listItem* listItem = (rpthread_listItem*)malloc(sizeof(rpthread_listItem));
+
+	//Set tcb
+	(*listItem).block = threadBlock;
+	(*listItem).next = NULL;
+
 	//Check type of scheduler
-	
-	//Insert to respective linked list
-	
+	//Not sure, but I think this is how to check
+	#ifndef MLFQ //If STCF
+		insertIntoSTCF(listItem);
+	#else //If MLFQ
+		insertIntoMLFQ(listItem);
+	#endif
+
+	return listItem;
+}
+
+/* Insert into rpthread_threadList */
+void insertIntoSTCF(rpthread_listItem_t* listItem) {
+	//Set listItem as new beginning of list and set current as next
+	(*listItem).next = rpthread_threadList;
+	rpthread_threadList = listItem;
+
+	return;
+}
+
+/* Append into rpthread_MLFQ[0] */
+void insertIntoMLFQ(rpthread_listItem_t* listItem) {
+	//If not setup yet, create levels
+	if (rpthread_MLFQ == NULL) {
+		rpthread_MLFQ = (rpthread_listItem_t**) malloc(sizeof(rpthread_listItem_t)*MLFQLEVELS);
+		//Set item (main thread) as first item
+		rpthread_MLFQ[0] = listItem;
+		return;
+	}
+
+	//Iterate through level 0 and append Item to end
+	rpthread_listItem_t* itemPtr = rpthread_MLFQ[0];
+	while ((*itemPtr).next != NULL) {
+		itemPtr = (*itemPtr).next;
+	}
+	(*itemPtr).next = listItem;
+	return;
 }
 
 // Feel free to add any other functions you need
-
