@@ -11,6 +11,13 @@ int nextThreadId = 1;
 struct itimerval schedulerTimer; //Timer that interrupts threads if threads are too slow
 rethread_listItem_t* currentItem = NULL;
 
+/* 0 if not specified, probably thread ended
+ * 1 if timer interrupted
+ * 2 if mutex blocked
+ */
+int proceedState = 0; //How the previous thread has closed
+
+
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
 	// Initialize scheduler if NULL
@@ -27,6 +34,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	void* contextStack = malloc(THREADSTACKSIZE);
 	(*threadBlock).stack = contextStack;
 
+	//Setup stack and uc_link (return context) to point to scheduler
 	getcontext(context);
 	(*context).uc_stack.ss_sp = contextStack;
 	(*context).uc_stack.ss_size = THREADSTACKSIZE;
@@ -113,8 +121,6 @@ static void schedule() {
 	// Invoke different actual scheduling algorithms
 	// according to policy (STCF or MLFQ)
 
-	// YOUR CODE HERE
-
 	// schedule policy
 	#ifndef MLFQ
 		// Choose STCF
@@ -128,24 +134,54 @@ static void schedule() {
 /* Preemptive SJF (STCF) scheduling algorithm */
 static void sched_stcf() {
 	// If triggered by timer
-	
+	if (proceedState == PROCEEDBYTIMER) {
 		// Get time since current started
-	
+		struct timeval timeEnd;
+		gettimeofday(&timeEnd, 0);
+
 		// Increment current's time
-	
+		(*current).priority = (
+			(*current).priority
+			+ (double) (
+				((timeEnd.tv_sec-prevTick.tv_sec)*1000000)
+				+ (timeEnd.tv_usec-prevTick.tv_usec)
+			)
+		);
+
+		// Set status to ready
+		(*current).status = READY;
+
 		// Reposition current in queue
-	
-	// If not triggered by timer, current thread has ended
-	
-		// Check joins
-	
-	// Store time when next thread start
-	
+		
+	} else if (proceedState == PROCEEDBYMUTEX) { //If proceed by mutex
+		//Set status to blocked and 
+	} else { // Current thread has ended
+		// Check jointhreads to trigger
+		
+
+		// Remove from queue
+		
+	}
+	proceedState = 0;
+
+	// Store time of when next thread start
+	gettimeofday(&prevTick, 0);
+
 	// Start Timer
 	setitimer(ITIMER_VIRTUAL, &timer, NULL);
 
-	// SetContext to first in queue
+	// Get first item in queue
+	rpthread_listItem_t* item = rpthread_threadList;
 	
+
+	// SetContext to first in queue
+	setcontext(
+		&(
+			(
+				*(*threadList).block
+			).context
+		)
+	);
 }
 
 /* Preemptive MLFQ scheduling algorithm */
@@ -202,7 +238,7 @@ void initScheduler () {
 
 void swapToScheduler(int sigNum) {
 	//Proceed to scheduler
-	proceedByTimer = 1; //Marks that scheduler was triggered by timer
+	proceedState = 1; //Marks that scheduler was triggered by timer
 	swapcontext(&((*currentItem).context), schedulerContext);
 	//Stores current context into currentItem and swaps to scheduler
 }

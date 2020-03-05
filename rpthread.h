@@ -15,6 +15,7 @@
 /* include lib header files that you need here: */
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,17 +34,26 @@ typedef struct threadControlBlock {
 	// thread stack
 	void* stack;
 	// thread priority
-	int priority; //Ignore in MLFQ, used to show length in PSJF
+	double priority; //Ignore in MLFQ, used to show length in PSJF
 	// 
 
 	// ...
 } tcb; 
 
+//Linked List
+typedef struct rpthread_listItem_t {
+	tcb* block; //tcp
+	struct rpthread_listItem_t* next; //next tcp
+} rpthread_listItem_t;
+
 /* mutex struct definition */
 typedef struct rpthread_mutex_t {
 	// thread that locked this mutex
 	// NULL if unlocked
-	tcb* thread;
+	tcb* callerThread;
+
+	// list of threads blocked by this mutex
+	rpthread_listItem_t* blocks;
 
 	// ...
 } rpthread_mutex_t;
@@ -54,15 +64,10 @@ ucontext_t* schedulerContext;
 /* TCB for main code */
 tcb* mainTCB;
 
-// Feel free to add your own auxiliary data structures (linked list or queue etc...)
-
-//Linked List
-typedef struct rpthread_listItem_t {
-	tcb* block;
-	struct rpthread_listItem_t* next;
-} rpthread_listItem_t;
 rpthread_listItem_t* rpthread_threadList; //Used in PSJF
 rpthread_listItem_t** rpthread_MLFQ; //rpthread_MLFQ[0] is top level, used in MLFQ scheduling
+
+struct timeval prevTick; //Stores when the most recent thread started
 
 /* Function Declarations: */
 
@@ -123,6 +128,10 @@ void insertIntoMLFQ(rpthread_listItem_t* listItem);
 #define READY 1
 #define SCHEDULED 2
 #define BLOCKED 3
+
+//Proceed States
+#define PROCEEDBYTIMER 1
+#define PROCEEDBYMUTEX 2
 
 //Constants
 //Probably need to change Stack Size
