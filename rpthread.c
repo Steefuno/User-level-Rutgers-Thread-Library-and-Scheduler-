@@ -7,7 +7,6 @@
 #include "rpthread.h"
 
 // INITAILIZE ALL YOUR VARIABLES HERE
-int nextThreadId = 1;
 struct itimerval schedulerTimer; //Timer that interrupts threads if threads are too slow
 rethread_listItem_t* currentItem = NULL;
 
@@ -16,7 +15,7 @@ rethread_listItem_t* currentItem = NULL;
  * 2 if mutex blocked
  */
 int proceedState = 0; //How the previous thread has closed
-
+rpthread_mutex_t* currentMutex = NULL; //When proceedState is 2, store the mutex that is blocking
 
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
@@ -25,9 +24,9 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 
 	// Create Thread Control Block
 	tcb* threadBlock = (tcb*)malloc(sizeof(tcb));
-	(*threadBlock).id = nextThreadId++;
 	(*threadBlock).status = READY;
 	(*threadBlock).priority = 0; //top priority
+	thread = (rpthread_t*)threadBlock;
 
 	//Setup context
 	ucontext_t* context = &((threadBlock*).context);
@@ -121,6 +120,11 @@ static void schedule() {
 	// Invoke different actual scheduling algorithms
 	// according to policy (STCF or MLFQ)
 
+	// Check if any thread in tryingToJoin can complete a join
+	// Iterate through each
+		//Check if referenced thread's status is ENDED
+		//If so, add back to queue
+
 	// schedule policy
 	#ifndef MLFQ
 		// Choose STCF
@@ -140,8 +144,8 @@ static void sched_stcf() {
 		gettimeofday(&timeEnd, 0);
 
 		// Increment current's time
-		(*current).priority = (
-			(*current).priority
+		(*(*currentItem).block).priority = (
+			(*(*currentItem).block).priority
 			+ (double) (
 				((timeEnd.tv_sec-prevTick.tv_sec)*1000000)
 				+ (timeEnd.tv_usec-prevTick.tv_usec)
@@ -149,17 +153,59 @@ static void sched_stcf() {
 		);
 
 		// Set status to ready
-		(*current).status = READY;
+		(*(*currentItem).block).status = READY;
 
 		// Reposition current in queue
-		
-	} else if (proceedState == PROCEEDBYMUTEX) { //If proceed by mutex
-		//Set status to blocked and 
-	} else { // Current thread has ended
-		// Check jointhreads to trigger
-		
+		// If current is the only thing in the list
+		if (rpthread_threadList == NULL
+			//Or if current has a lower priority than first in list
+			|| (*(*rpthread_threadList).block).priority > (*(*currentItem).block).priority) {
+			//Insert current as first in list
+			(*currentItem).next = rpthread_threadList;
+			rpthead_threadList = currentItem;
+		} else { 
+			// Iterate through queue until found an item 
+			rpthread_listItem_t* listItem = rpthread_threadList;
 
-		// Remove from queue
+			//Check if not at end of queue
+			while ((*listItem).next != NULL
+				//Check if next item has lower time than current
+				&& (*(*((*listItem).next)).block).priority < (*(*currentItem).block).priority) {
+				listItem = (*listItem).next;
+			}
+
+			// Either at end of list or next item is bigger than current
+			// So set current in between
+			(*currentItem).next = (*listItem).next;
+			(*listItem).next = currentItem;
+		}
+	} else if (proceedState == PROCEEDBYMUTEX) { //If proceed by mutex
+		// Get time since current started
+		struct timeval timeEnd;
+		gettimeofday(&timeEnd, 0);
+
+		// Increment current's time
+		(*(*currentItem).block).priority = (
+			(*(*currentItem).block).priority
+			+ (double) (
+				((timeEnd.tv_sec-prevTick.tv_sec)*1000000)
+				+ (timeEnd.tv_usec-prevTick.tv_usec)
+			)
+		);
+
+		// Set status to blocked
+		(*(*currentItem).block).status = BLOCKED;
+
+		// Link current inside mutex
+		(*currentItem).next = (*currentMutex).blocks
+		(*currentMutex).blocks = currentItem
+
+		currentMutex = NULL;
+	} else if (proceedState == PROCEEDBYJOIN) { //If waiting to join on a thread
+		//Add to tryingToJoin list of threads
+		
+	} else { // Current thread has ended
+		//Set status to ENDED
 		
 	}
 	proceedState = 0;
@@ -170,16 +216,19 @@ static void sched_stcf() {
 	// Start Timer
 	setitimer(ITIMER_VIRTUAL, &timer, NULL);
 
-	// Get first item in queue
-	rpthread_listItem_t* item = rpthread_threadList;
-	
+	// Assume queue always has atleast one item
+	// Pop first item in queue
+	currentItem = rpthread_threadList;
+	rpthread_threadList = (*currentItem).next;
+	//Don't need to check state, if blocked, it will be removed from queue
 
+	// Set to Running state
+	(*(*currentItem).block).status = SCHEDULED;
+	
 	// SetContext to first in queue
 	setcontext(
 		&(
-			(
-				*(*threadList).block
-			).context
+			((*currentItem).block).context
 		)
 	);
 }
@@ -239,7 +288,7 @@ void initScheduler () {
 void swapToScheduler(int sigNum) {
 	//Proceed to scheduler
 	proceedState = 1; //Marks that scheduler was triggered by timer
-	swapcontext(&((*currentItem).context), schedulerContext);
+	swapcontext(&((*(*currentItem).block).context), schedulerContext);
 	//Stores current context into currentItem and swaps to scheduler
 }
 

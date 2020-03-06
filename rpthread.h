@@ -128,10 +128,13 @@ void insertIntoMLFQ(rpthread_listItem_t* listItem);
 #define READY 1
 #define SCHEDULED 2
 #define BLOCKED 3
+#define ENDED 4
 
 //Proceed States
+#define PROCEEDBYFINISH 0
 #define PROCEEDBYTIMER 1
 #define PROCEEDBYMUTEX 2
+#define PROCEEDBYJOIN 3
 
 //Constants
 //Probably need to change Stack Size
