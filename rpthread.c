@@ -27,7 +27,6 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	tcb* threadBlock = (tcb*)malloc(sizeof(tcb));
 	(*threadBlock).status = SCHEDULED;
 	(*threadBlock).priority = 0; //top priority
-	thread = (rpthread_t*)threadBlock;
 
 	//Setup context
 	ucontext_t* context = &((threadBlock*).context);
@@ -42,10 +41,11 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	makecontext(*context, function)
 
 	// add new tcb into queue
-	insertIntoScheduler(threadBlock);
+	rpthread_listItem_t* listItem = insertIntoScheduler(threadBlock);
+	thread = (rpthread_t*) listItem; //thread will reference the listItem
 	
 	// not sure what this should return
-	return thread;
+	return 1;
 };
 
 /* give CPU possession to other user-level threads voluntarily */
@@ -54,12 +54,8 @@ int rpthread_yield() {
 	// Save context of this thread to its thread control block
 	// switch from thread context to scheduler context
 
-	// Change tcb state from RUNNING to READY
-
-	// Iterate through queue until first READY
-	
-	// 
-
+	proceedState = PROCEEDBYYIELD;
+	swapcontext((*((*currentItem).block)).context, schedulerContext);
 	return 0;
 };
 
@@ -68,7 +64,9 @@ int rpthread_yield() {
 void deallocContext(rpthread_listItem_* listItem) {
 	// Deallocate the stack
 	free((*((*listItem).block)).stack);
-	///(*currentItem).stack = NULL;
+
+	// Dereferences the stack
+	(*((*listItem).block)).stack = NULL;
 
 	return;
 }
@@ -87,11 +85,12 @@ void deallocTCB(rpthread_listItem_t* listItem) {
 
 /* terminate a thread */
 void rpthread_exit(void *value_ptr) {
-	// Deallocated any dynamic memory created when starting this thread
-	deallocContext(); // Deallocates the context, but leaves tcb to be joined
-
 	// Mark as ended to be joined
-	processState = ENDED;
+	proceedState = PROCEEDBYFINISH;
+
+	// Set value_ptr to something
+	*value_ptr = 1;
+
 	// Setcontext to scheduler to handle deallocate context
 	setcontext(schedulerContext);
 };
@@ -102,13 +101,18 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	// Wait for a specific thread to terminate
 	// De-allocate any dynamic memory created by the joining thread
 
-	// Check if tcb attempting to join for is ENDED
-		// De-allocate tcb
-		// return
-	// if not ended
-		// Add to tryingToJoin
-		// getcontext to save into current's context
-	return 0;
+	// Get listItem for thread
+	rpthread_listItem_t* toJoinItem = (rpthread_listItem_t*)thread;
+	tcb* block = (*toJoinItem).block;
+
+	// Wait until toJoinItem's block's status is ENDED
+	while ((*block).status != ENDED) {
+		proceedState = PROCEEDBYJOIN;
+		// Swap to scheduler
+		swapcontext((*((*currentItem).block)).context, schedulerContext);
+	}
+
+	return 1;
 };
 
 /* initialize the mutex lock */
@@ -157,11 +161,6 @@ static void schedule() {
 	// Invoke different actual scheduling algorithms
 	// according to policy (STCF or MLFQ)
 
-	// Check if any thread in tryingToJoin can complete a join
-	// Iterate through each thread ///
-		//Check if referenced thread's status is ENDED
-		//If so, add back to queue
-
 	// schedule policy
 	#ifndef MLFQ
 		// Choose STCF
@@ -172,8 +171,9 @@ static void schedule() {
 	#endif
 }
 
-/* Handle current if scheduler is triggered by timer */
-void stcfProceedByTimer() {
+/* Handle current if scheduler is triggered by interrupt */
+// Add back to queue and adjust priority
+void stcfProceedByInterrupt() {
 	// Get time since current started
 	struct timeval timeEnd;
 	gettimeofday(&timeEnd, 0);
@@ -220,44 +220,22 @@ void stcfProceedByTimer() {
 /* Preemptive SJF (STCF) scheduling algorithm */
 void sched_stcf() {
 	/* Handle current tcb */
-	// If triggered by timer
-	if (proceedState == PROCEEDBYTIMER) {
-		stcfProceedByTimer();
-	} else if (proceedState == PROCEEDBYMUTEX) { //If proceed by mutex
-		// Get time since current started
-		struct timeval timeEnd;
-		gettimeofday(&timeEnd, 0);
 
-		// Increment current's time
-		(*(*currentItem).block).priority = (
-			(*(*currentItem).block).priority
-			+ (double) (
-				((timeEnd.tv_sec-prevTick.tv_sec)*1000000)
-				+ (timeEnd.tv_usec-prevTick.tv_usec)
-			)
-		);
-
-		// Set status to blocked
+	if (proceedState == PROCEEDBYTIMER) { // If interrupted by timer
+		stcfProceedByInterrupt();
+		(*(*currentItem).block).status = SCHEDULED;
+	} else if (proceedState == PROCEEDBYYIELD) { // If interrupted by yielding
+		stcfProceedByInterrupt();
+		(*(*currentItem).block).status = READY;
+	} else if (proceedState == PROCEEDBYMUTEX) { //If blocked by mutex
+		stcfProceedByInterrupt();
 		(*(*currentItem).block).status = BLOCKED;
-
-		// Link current inside mutex
-		(*currentItem).next = (*currentMutex).blocks
-		(*currentMutex).blocks = currentItem
-
-		currentMutex = NULL;
 	} else if (proceedState == PROCEEDBYJOIN) { //If waiting to join on a thread
-		//Check if joinToTCB is already ENDED
-			//Add current back to queue
-		//Else
-			//Add to tryingToJoin list of threads
-		
-		//Set status to BLOCKED
-	} else if (proceedState == PROCEEDBYYIELD) { //If giving up scheduler time
-		//Insert into yielding queue
-
-		//Set state to READY
-	} else { // Current thread has ended
+		stcfProceedByInterrupt();
+		(*(*currentItem).block).status = BLOCKED;
+	} else { // If current has ended or exited, proceedState == PROCEEDBYFINISH
 		deallocContext();
+		(*(*currentItem).block).status = ENDED;
 	}
 
 	/* Start handling new tcb */
@@ -268,26 +246,17 @@ void sched_stcf() {
 	// Store time of when next thread start
 	gettimeofday(&prevTick, 0);
 
-	// Start Timer
+	// Start/Reset Timer
 	setitimer(ITIMER_VIRTUAL, &timer, NULL);
 
-	//If queue actually has an item, continue normally
-	if (rpthread_threadList != NULL) {
-		//Pop from queue
-		currentItem = rpthread_threadList;
-		rpthread_threadList = (*rpthread_threadList).next;
-		//Ignore checking state, unneccessary	
+	// Assume queue has atleast one item, should be main function atleast
+	// Pop from queue
+	currentItem = rpthread_threadList;
+	rpthread_threadList = (*rpthread_threadList).next;
+	// Ignore checking state, unneccessary
 
-		// Set to Running state
-		(*(*currentItem).block).status = RUNNING;
-	} else { //If queue is empty, check yielding threads
-		//Assuming there's atleast 1 thread (or main thread)
-		//Pop from queue
-		currentItem = rpthread_yieldingQueue;
-		rpthread_yieldingQueue = (*rpthread_yieldingQueue).next;
-
-		(*(*currentItem).block).status = READY;
-	}
+	// Set to Running state
+	(*(*currentItem).block).status = RUNNING;
 
 	// SetContext new item
 	setcontext(

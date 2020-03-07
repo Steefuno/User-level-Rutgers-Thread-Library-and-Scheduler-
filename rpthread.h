@@ -50,9 +50,6 @@ typedef struct rpthread_mutex_t {
 	// NULL if unlocked
 	tcb* callerThread;
 
-	// list of threads blocked by this mutex
-	rpthread_listItem_t* blocks;
-
 	// ...
 } rpthread_mutex_t;
 
@@ -109,8 +106,8 @@ int rpthread_mutex_destroy(rpthread_mutex_t *mutex);
 /* scheduler */
 static void schedule();
 
-/* handle swapping out of a tcb if interrupted by timer in sctf */
-void stcfProceedByTimer();
+/* handle swapping out of a tcb if interrupted sctf */
+void stcfProceedByInterrupt();
 
 /* initialize scheduler */
 void initScheduler();
@@ -145,7 +142,7 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 //TCB States
 #define RUNNING 0 //Current TCB
 #define SCHEDULED 1 //Enqueued
-#define READY 2 //Enqueued, but manually yielding
+#define READY 2 //Enqueued, but manually yielded
 #define BLOCKED 3 //Blocked by mutex
 #define ENDED 4 //Finished function and waiting to be joined
 
