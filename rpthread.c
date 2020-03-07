@@ -8,14 +8,15 @@
 
 // INITAILIZE ALL YOUR VARIABLES HERE
 struct itimerval schedulerTimer; //Timer that interrupts threads if threads are too slow
-rethread_listItem_t* currentItem = NULL;
+rpthread_listItem_t* currentItem = NULL;
 
 /* 0 if not specified, probably thread ended
  * 1 if timer interrupted
  * 2 if mutex blocked
  */
 int proceedState = 0; //How the previous thread has closed
-rpthread_mutex_t* currentMutex = NULL; //When proceedState is 2, store the mutex that is blocking
+rpthread_mutex_t* currentMutex = NULL; //When proceedState is PROCEEDBYMUTEX, store the mutex that is blocking
+tcb* joinToTCB = NULL; //When proceedState is PROCEEDBYJOIN, store the tcb to be joined
 
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
@@ -24,7 +25,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 
 	// Create Thread Control Block
 	tcb* threadBlock = (tcb*)malloc(sizeof(tcb));
-	(*threadBlock).status = READY;
+	(*threadBlock).status = SCHEDULED;
 	(*threadBlock).priority = 0; //top priority
 	thread = (rpthread_t*)threadBlock;
 
@@ -44,24 +45,55 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	insertIntoScheduler(threadBlock);
 	
 	// not sure what this should return
-	return (*threadBlock).id;
+	return thread;
 };
 
 /* give CPU possession to other user-level threads voluntarily */
 int rpthread_yield() {
-	// Change thread state from Running to Ready
+	// Change tcb state from RUNNING to READY
 	// Save context of this thread to its thread control block
 	// switch from thread context to scheduler context
 
-	// YOUR CODE HERE
+	// Change tcb state from RUNNING to READY
+
+	// Iterate through queue until first READY
+	
+	// 
+
 	return 0;
 };
+
+/* keeps the tcb, but deallocates the stack of the select listItem */
+// To be used after pthread_exit in scheduler
+void deallocContext(rpthread_listItem_* listItem) {
+	// Deallocate the stack
+	free((*((*listItem).block)).stack);
+	///(*currentItem).stack = NULL;
+
+	return;
+}
+
+/* deallocates the block of the select listItem */
+// To be used when joined
+void deallocTCB(rpthread_listItem_t* listItem) {
+	//Frees block
+	free((*listItem).block);
+
+	//Frees listItem
+	free(listItem);
+
+	return;
+}
 
 /* terminate a thread */
 void rpthread_exit(void *value_ptr) {
 	// Deallocated any dynamic memory created when starting this thread
+	deallocContext(); // Deallocates the context, but leaves tcb to be joined
 
-	// YOUR CODE HERE
+	// Mark as ended to be joined
+	processState = ENDED;
+	// Setcontext to scheduler to handle deallocate context
+	setcontext(schedulerContext);
 };
 
 
@@ -70,7 +102,12 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	// Wait for a specific thread to terminate
 	// De-allocate any dynamic memory created by the joining thread
 
-	// YOUR CODE HERE
+	// Check if tcb attempting to join for is ENDED
+		// De-allocate tcb
+		// return
+	// if not ended
+		// Add to tryingToJoin
+		// getcontext to save into current's context
 	return 0;
 };
 
@@ -121,7 +158,7 @@ static void schedule() {
 	// according to policy (STCF or MLFQ)
 
 	// Check if any thread in tryingToJoin can complete a join
-	// Iterate through each
+	// Iterate through each thread ///
 		//Check if referenced thread's status is ENDED
 		//If so, add back to queue
 
@@ -135,50 +172,57 @@ static void schedule() {
 	#endif
 }
 
+/* Handle current if scheduler is triggered by timer */
+void stcfProceedByTimer() {
+	// Get time since current started
+	struct timeval timeEnd;
+	gettimeofday(&timeEnd, 0);
+
+	// Increment current's time
+	(*(*currentItem).block).priority = (
+		(*(*currentItem).block).priority
+		+ (double) (
+			((timeEnd.tv_sec-prevTick.tv_sec)*1000000)
+			+ (timeEnd.tv_usec-prevTick.tv_usec)
+		)
+	);
+
+	// Set status to ready
+	(*(*currentItem).block).status = SCHEDULED;
+
+	// Reposition current in queue
+	// If current is the only thing in the list
+	if (rpthread_threadList == NULL
+		//Or if current has a lower priority than first in list
+		|| (*(*rpthread_threadList).block).priority > (*(*currentItem).block).priority) {
+		//Insert current as first in list
+		(*currentItem).next = rpthread_threadList;
+		rpthead_threadList = currentItem;
+	} else { 
+		// Iterate through queue until found an item 
+		rpthread_listItem_t* listItem = rpthread_threadList;
+
+		//While not at end of queue
+		while ((*listItem).next != NULL
+			//And if next item has lower time than current
+			&& (*(*((*listItem).next)).block).priority < (*(*currentItem).block).priority) {
+			listItem = (*listItem).next;
+		}
+
+		// Either at end of list or next item is bigger than current
+		// So set current in between
+		(*currentItem).next = (*listItem).next;
+		(*listItem).next = currentItem;
+	}
+	return;
+}
+
 /* Preemptive SJF (STCF) scheduling algorithm */
-static void sched_stcf() {
+void sched_stcf() {
+	/* Handle current tcb */
 	// If triggered by timer
 	if (proceedState == PROCEEDBYTIMER) {
-		// Get time since current started
-		struct timeval timeEnd;
-		gettimeofday(&timeEnd, 0);
-
-		// Increment current's time
-		(*(*currentItem).block).priority = (
-			(*(*currentItem).block).priority
-			+ (double) (
-				((timeEnd.tv_sec-prevTick.tv_sec)*1000000)
-				+ (timeEnd.tv_usec-prevTick.tv_usec)
-			)
-		);
-
-		// Set status to ready
-		(*(*currentItem).block).status = READY;
-
-		// Reposition current in queue
-		// If current is the only thing in the list
-		if (rpthread_threadList == NULL
-			//Or if current has a lower priority than first in list
-			|| (*(*rpthread_threadList).block).priority > (*(*currentItem).block).priority) {
-			//Insert current as first in list
-			(*currentItem).next = rpthread_threadList;
-			rpthead_threadList = currentItem;
-		} else { 
-			// Iterate through queue until found an item 
-			rpthread_listItem_t* listItem = rpthread_threadList;
-
-			//Check if not at end of queue
-			while ((*listItem).next != NULL
-				//Check if next item has lower time than current
-				&& (*(*((*listItem).next)).block).priority < (*(*currentItem).block).priority) {
-				listItem = (*listItem).next;
-			}
-
-			// Either at end of list or next item is bigger than current
-			// So set current in between
-			(*currentItem).next = (*listItem).next;
-			(*listItem).next = currentItem;
-		}
+		stcfProceedByTimer();
 	} else if (proceedState == PROCEEDBYMUTEX) { //If proceed by mutex
 		// Get time since current started
 		struct timeval timeEnd;
@@ -202,13 +246,24 @@ static void sched_stcf() {
 
 		currentMutex = NULL;
 	} else if (proceedState == PROCEEDBYJOIN) { //If waiting to join on a thread
-		//Add to tryingToJoin list of threads
+		//Check if joinToTCB is already ENDED
+			//Add current back to queue
+		//Else
+			//Add to tryingToJoin list of threads
 		
+		//Set status to BLOCKED
+	} else if (proceedState == PROCEEDBYYIELD) { //If giving up scheduler time
+		//Insert into yielding queue
+
+		//Set state to READY
 	} else { // Current thread has ended
-		//Set status to ENDED
-		
+		deallocContext();
 	}
-	proceedState = 0;
+
+	/* Start handling new tcb */
+
+	//Prepare proceedState 
+	proceedState = ENDED;
 
 	// Store time of when next thread start
 	gettimeofday(&prevTick, 0);
@@ -216,16 +271,25 @@ static void sched_stcf() {
 	// Start Timer
 	setitimer(ITIMER_VIRTUAL, &timer, NULL);
 
-	// Assume queue always has atleast one item
-	// Pop first item in queue
-	currentItem = rpthread_threadList;
-	rpthread_threadList = (*currentItem).next;
-	//Don't need to check state, if blocked, it will be removed from queue
+	//If queue actually has an item, continue normally
+	if (rpthread_threadList != NULL) {
+		//Pop from queue
+		currentItem = rpthread_threadList;
+		rpthread_threadList = (*rpthread_threadList).next;
+		//Ignore checking state, unneccessary	
 
-	// Set to Running state
-	(*(*currentItem).block).status = SCHEDULED;
-	
-	// SetContext to first in queue
+		// Set to Running state
+		(*(*currentItem).block).status = RUNNING;
+	} else { //If queue is empty, check yielding threads
+		//Assuming there's atleast 1 thread (or main thread)
+		//Pop from queue
+		currentItem = rpthread_yieldingQueue;
+		rpthread_yieldingQueue = (*rpthread_yieldingQueue).next;
+
+		(*(*currentItem).block).status = READY;
+	}
+
+	// SetContext new item
 	setcontext(
 		&(
 			((*currentItem).block).context
@@ -234,7 +298,7 @@ static void sched_stcf() {
 }
 
 /* Preemptive MLFQ scheduling algorithm */
-static void sched_mlfq() {
+void sched_mlfq() {
 	// If 
 }
 
@@ -287,7 +351,7 @@ void initScheduler () {
 
 void swapToScheduler(int sigNum) {
 	//Proceed to scheduler
-	proceedState = 1; //Marks that scheduler was triggered by timer
+	proceedState = PROCEEDBYTIMER; //Marks that scheduler was triggered by timer
 	swapcontext(&((*(*currentItem).block).context), schedulerContext);
 	//Stores current context into currentItem and swaps to scheduler
 }
@@ -314,30 +378,59 @@ rpthread_listItem_t* insertIntoScheduler(tcb* threadBlock) {
 }
 
 /* Insert into rpthread_threadList */
-void insertIntoSTCF(rpthread_listItem_t* listItem) {
-	//Set listItem as new beginning of list and set current as next
-	(*listItem).next = rpthread_threadList;
-	rpthread_threadList = listItem;
-
+void insertIntoSTCF(rpthread_listItem_t* listItem) {	
+	insertIntoSTCFQueue(listItem, &rpthread_threadList);
 	return;
 }
 
 /* Append into rpthread_MLFQ[0] */
-void insertIntoMLFQ(rpthread_listItem_t* listItem) {
+void insertIntoMLFQ(rpthread_listItem_t* listItem, int selectLevel) {
+	(*listItem).next = NULL;
+
 	//If not setup yet, create levels
 	if (rpthread_MLFQ == NULL) {
 		rpthread_MLFQ = (rpthread_listItem_t**) malloc(sizeof(rpthread_listItem_t)*MLFQLEVELS);
-		//Set item (main thread) as first item
-		rpthread_MLFQ[0] = listItem;
+
+		//Set all levels to NULL
+		int i=0;
+		while (i < MLFQLevels) {
+			rpthread_MLFQ[i++] = NULL;
+		}
+	}
+
+	//Insert into MLFQ queue at select level
+	insertIntoSTCFQueue(listItem, &(rpthread_MLFQ[selectLevel]));
+	return;
+}
+
+/* Add into a queue */
+//Second argument is a pointer to a queuePtr
+void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem** queuePtr) {
+	(*listItem).next = NULL;
+
+	//If queue DNE
+	if (*queuePtr == NULL) {
+		(*queuePtr) = listItem;
 		return;
 	}
 
-	//Iterate through level 0 and append Item to end
-	rpthread_listItem_t* itemPtr = rpthread_MLFQ[0];
-	while ((*itemPtr).next != NULL) {
-		itemPtr = (*itemPtr).next;
+	//if first in queue has been in use longer than listItem
+	if ((*((*(*queuePtr)).block)).priority > (*((*listItem).block)).priority) {
+		//Set listItem as first in queue
+		(*listItem).next = (*queuePtr);
+		(*queuePtr) = listItem;
+		return;
 	}
-	(*itemPtr).next = listItem;
+
+	rpthread_listItem* item = (*queuePtr);
+	//Iterate until next has been in use longer than listItem
+	while (*((*((*item).next)).block).priority > (*((*listItem).block)).priority) {
+		item = (*item).next;
+	}
+
+	//Insert listItem
+	(*listItem).next = (*item).next;
+	(*item).next = listItem;
 	return;
 }
 
