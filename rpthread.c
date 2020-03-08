@@ -7,16 +7,14 @@
 #include "rpthread.h"
 
 // INITAILIZE ALL YOUR VARIABLES HERE
-struct itimerval schedulerTimer; //Timer that interrupts threads if threads are too slow
-rpthread_listItem_t* currentItem = NULL;
+static struct itimerval schedulerTimer; //Timer that interrupts threads if threads are too slow
+static rpthread_listItem_t* currentItem = NULL;
 
 /* 0 if not specified, probably thread ended
  * 1 if timer interrupted
  * 2 if mutex blocked
  */
-int proceedState = 0; //How the previous thread has closed
-rpthread_mutex_t* currentMutex = NULL; //When proceedState is PROCEEDBYMUTEX, store the mutex that is blocking
-tcb* joinToTCB = NULL; //When proceedState is PROCEEDBYJOIN, store the tcb to be joined
+static int proceedState = 0; //How the previous thread has closed
 
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
@@ -105,22 +103,33 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	rpthread_listItem_t* toJoinItem = (rpthread_listItem_t*)thread;
 	tcb* block = (*toJoinItem).block;
 
-	// Wait until toJoinItem's block's status is ENDED
-	while ((*block).status != ENDED) {
+	// Position to revert to when given time in scheduler
+	getcontext((*((*currentItem).block)).context);
+
+	// If still trying to join, go back to scheduler
+	if ((*block).status != ENDED) {
 		proceedState = PROCEEDBYJOIN;
-		// Swap to scheduler
-		swapcontext((*((*currentItem).block)).context, schedulerContext);
+		// go to scheduler
+		setcontext(schedulerContext);
 	}
 
+	// Deallocate the ended block
+	deallocateTCB(toJoinItem);
+
+	// Continue current
 	return 1;
 };
 
 /* initialize the mutex lock */
 int rpthread_mutex_init(rpthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr) {
-	//Initialize data structures for this mutex
+	// Initialize data structures for this mutex
+	// Ignore mutexattr
 
-	// YOUR CODE HERE
-	return 0;
+	// Allocate mutex and set thread as NULL
+	(*mutex).thread = NULL;
+
+	// Continue current
+	return 1;
 };
 
 /* aquire the mutex lock */
@@ -130,8 +139,26 @@ int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
 	// If acquiring mutex fails, push current thread into block list and 
 	// context switch to the scheduler thread
 
-	// YOUR CODE HERE
-	return 0;
+	// Ignore if already locked by current thread
+	if ((*mutex).thread == currentItem) {
+		return 0;
+	}
+
+	// Position to revert to when given time in scheduler
+	getcontext((*((*currentItem).block)).context);
+
+	// If mutex is occupied
+	if ((*mutex).thread != NULL) {
+		proceedState = PROCEEDBYJOIN;
+		// go to scheduler
+ 		setcontext(schedulerContext);
+	}
+
+	// Set mutex's thread to current
+	(*mutex).thread = currentItem;
+
+	// Continue current
+	return 1;
 };
 
 /* release the mutex lock */
@@ -140,14 +167,23 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex) {
 	// Put threads in block list to run queue 
 	// so that they could compete for mutex later.
 
-	// YOUR CODE HERE
-	return 0;
+	if ((*mutex).thread != currentItem) {
+		
+	}
+
+	// Remove current from mutex
+	(*mutex).thread = NULL;
+
+	// Continue current
+	return 1;
 };
 
 
 /* destroy the mutex */
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex) {
 	// Deallocate dynamic memory created in rpthread_mutex_init
+
+	
 
 	return 0;
 };

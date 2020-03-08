@@ -48,16 +48,10 @@ typedef struct rpthread_listItem_t {
 typedef struct rpthread_mutex_t {
 	// thread that locked this mutex
 	// NULL if unlocked
-	tcb* callerThread;
+	rpthread_listItem_t* thread;
 
 	// ...
 } rpthread_mutex_t;
-
-/* item in linked list that stores mutexes */
-typedef struct rpthread_listMutex_t {
-	rpthread_mutex_t* mutex;
-	struct rpthread_listMutex_t* next;
-} rpthread_listMutex_t;
 
 /* Context to swap to to use scheduler */
 ucontext_t* schedulerContext;
@@ -67,7 +61,6 @@ tcb* mainTCB;
 
 rpthread_listItem_t* rpthread_threadList; //Used in PSJF
 rpthread_listItem_t** rpthread_MLFQ; //rpthread_MLFQ[0] is top level, used in MLFQ scheduling
-rpthread_listMutex_t* mutexList; //Linked list of all mutexes
 
 struct timeval prevTick; //Stores when the most recent thread started
 
