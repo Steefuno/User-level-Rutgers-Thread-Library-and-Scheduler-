@@ -15,6 +15,7 @@ static rpthread_listItem_t* currentItem = NULL;
  * 2 if mutex blocked
  */
 static int proceedState = 0; //How the previous thread has closed
+void *(*makeFunction)(void*) = NULL; //Pointer to function to use makecontext on
 
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
@@ -27,7 +28,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	(*threadBlock).priority = 0; //top priority
 
 	//Setup context
-	ucontext_t* context = &((threadBlock*).context);
+	ucontext_t* context = &((*threadBlock).context);
 	void* contextStack = malloc(THREADSTACKSIZE);
 	(*threadBlock).stack = contextStack;
 
@@ -36,7 +37,8 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	(*context).uc_stack.ss_sp = contextStack;
 	(*context).uc_stack.ss_size = THREADSTACKSIZE;
 	(*context).uc_link = schedulerContext;
-	makecontext(*context, function)
+
+	makecontext(context, makecontextHelper, 2, function, arg); // does makecontext
 
 	// add new tcb into queue
 	rpthread_listItem_t* listItem = insertIntoScheduler(threadBlock);
@@ -53,13 +55,20 @@ int rpthread_yield() {
 	// switch from thread context to scheduler context
 
 	proceedState = PROCEEDBYYIELD;
-	swapcontext((*((*currentItem).block)).context, schedulerContext);
+	swapcontext(
+		&(
+			(*
+				((*currentItem).block)
+			).context
+		),
+		schedulerContext
+	);
 	return 0;
 };
 
 /* keeps the tcb, but deallocates the stack of the select listItem */
 // To be used after pthread_exit in scheduler
-void deallocContext(rpthread_listItem_* listItem) {
+void deallocContext(rpthread_listItem_t* listItem) {
 	// Deallocate the stack
 	free((*((*listItem).block)).stack);
 
@@ -86,9 +95,6 @@ void rpthread_exit(void *value_ptr) {
 	// Mark as ended to be joined
 	proceedState = PROCEEDBYFINISH;
 
-	// Set value_ptr to something
-	*value_ptr = 1;
-
 	// Setcontext to scheduler to handle deallocate context
 	setcontext(schedulerContext);
 };
@@ -104,7 +110,13 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	tcb* block = (*toJoinItem).block;
 
 	// Position to revert to when given time in scheduler
-	getcontext((*((*currentItem).block)).context);
+	getcontext(
+		&(
+			(
+				*((*currentItem).block)
+			).context
+		)
+	);
 
 	// If still trying to join, go back to scheduler
 	if ((*block).status != ENDED) {
@@ -114,7 +126,7 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	}
 
 	// Deallocate the ended block
-	deallocateTCB(toJoinItem);
+	deallocTCB(toJoinItem);
 
 	// Continue current
 	return 1;
@@ -126,6 +138,7 @@ int rpthread_mutex_init(rpthread_mutex_t *mutex, const pthread_mutexattr_t *mute
 	// Ignore mutexattr
 
 	// Allocate mutex and set thread as NULL
+	mutex = (rpthread_mutex_t*)malloc(sizeof(rpthread_mutex_t));
 	(*mutex).thread = NULL;
 
 	// Continue current
@@ -141,11 +154,18 @@ int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
 
 	// Ignore if already locked by current thread
 	if ((*mutex).thread == currentItem) {
+		// Should error
 		return 0;
 	}
 
 	// Position to revert to when given time in scheduler
-	getcontext((*((*currentItem).block)).context);
+	getcontext(
+		&(
+			(
+				*((*currentItem).block)
+			).context
+		)
+	);
 
 	// If mutex is occupied
 	if ((*mutex).thread != NULL) {
@@ -168,7 +188,8 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex) {
 	// so that they could compete for mutex later.
 
 	if ((*mutex).thread != currentItem) {
-		
+		// Should error
+		return 0;
 	}
 
 	// Remove current from mutex
@@ -183,10 +204,20 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex) {
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex) {
 	// Deallocate dynamic memory created in rpthread_mutex_init
 
-	
+	if ((*mutex).thread != NULL && (*mutex).thread != currentItem) {
+		// Should error
+		return 0;
+	}
 
-	return 0;
+	free(mutex);
+
+	return 1;
 };
+
+/* helper function to convert void* (*function)(void*) to void* (*function)(void) and use makecontext */
+void makecontextHelper(void* (*selectFunction)(void*), void* selectArg) {
+	selectFunction(selectArg);
+}
 
 /* scheduler */
 static void schedule() {
@@ -233,7 +264,7 @@ void stcfProceedByInterrupt() {
 		|| (*(*rpthread_threadList).block).priority > (*(*currentItem).block).priority) {
 		//Insert current as first in list
 		(*currentItem).next = rpthread_threadList;
-		rpthead_threadList = currentItem;
+		rpthread_threadList = currentItem;
 	} else { 
 		// Iterate through queue until found an item 
 		rpthread_listItem_t* listItem = rpthread_threadList;
@@ -270,7 +301,7 @@ void sched_stcf() {
 		stcfProceedByInterrupt();
 		(*(*currentItem).block).status = BLOCKED;
 	} else { // If current has ended or exited, proceedState == PROCEEDBYFINISH
-		deallocContext();
+		deallocContext(currentItem);
 		(*(*currentItem).block).status = ENDED;
 	}
 
@@ -283,7 +314,7 @@ void sched_stcf() {
 	gettimeofday(&prevTick, 0);
 
 	// Start/Reset Timer
-	setitimer(ITIMER_VIRTUAL, &timer, NULL);
+	setitimer(ITIMER_VIRTUAL, &schedulerTimer, NULL);
 
 	// Assume queue has atleast one item, should be main function atleast
 	// Pop from queue
@@ -297,7 +328,9 @@ void sched_stcf() {
 	// SetContext new item
 	setcontext(
 		&(
-			((*currentItem).block).context
+			(*
+				((*currentItem).block)
+			).context
 		)
 	);
 }
@@ -319,11 +352,10 @@ void initScheduler () {
 	getcontext(schedulerContext);
 	(*schedulerContext).uc_stack.ss_sp = schedulerStack;
 	(*schedulerContext).uc_stack.ss_size = SCHEDULERSTACKSIZE;
-	makecontext(*schedulerContext, schedule);
+	makecontext(schedulerContext, &schedule, 0);
 
 	//Sets tcb to represent main
 	mainTCB = (tcb*)malloc(sizeof(tcb));
-	(*mainTCB).id = 0;
 	(*mainTCB).status = SCHEDULED;
 	(*mainTCB).priority = 0;
 
@@ -348,7 +380,7 @@ void initScheduler () {
 	schedulerTimer.it_value.tv_usec = TICKUSEC;
 
 	//Start timer
-	setitimer(ITIMER_VIRTUAL, &timer, NULL);
+	setitimer(ITIMER_VIRTUAL, &schedulerTimer, NULL);
 
 	//Return to adding thread
 	return;
@@ -365,7 +397,7 @@ void swapToScheduler(int sigNum) {
 /* returns the listItem of tcb in queue */
 rpthread_listItem_t* insertIntoScheduler(tcb* threadBlock) {
 	//Create listItem
-	rpthread_listItem* listItem = (rpthread_listItem*)malloc(sizeof(rpthread_listItem));
+	rpthread_listItem_t* listItem = (rpthread_listItem_t*)malloc(sizeof(rpthread_listItem_t));
 
 	//Set tcb
 	(*listItem).block = threadBlock;
@@ -398,7 +430,7 @@ void insertIntoMLFQ(rpthread_listItem_t* listItem, int selectLevel) {
 
 		//Set all levels to NULL
 		int i=0;
-		while (i < MLFQLevels) {
+		while (i < MLFQLEVELS) {
 			rpthread_MLFQ[i++] = NULL;
 		}
 	}
@@ -410,7 +442,7 @@ void insertIntoMLFQ(rpthread_listItem_t* listItem, int selectLevel) {
 
 /* Add into a queue */
 //Second argument is a pointer to a queuePtr
-void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem** queuePtr) {
+void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** queuePtr) {
 	(*listItem).next = NULL;
 
 	//If queue DNE
@@ -419,18 +451,59 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem** queu
 		return;
 	}
 
-	//if first in queue has been in use longer than listItem
-	if ((*((*(*queuePtr)).block)).priority > (*((*listItem).block)).priority) {
+	//if listItem has a lower priority than the first in queue
+	int hasLowerPriority = (
+		(
+			*(
+				(**queuePtr).block
+			)
+		).priority
+		>
+		(
+			*(
+				(*listItem).block
+			)
+		).priority
+	);
+	if (hasLowerPriority) {
 		//Set listItem as first in queue
 		(*listItem).next = (*queuePtr);
 		(*queuePtr) = listItem;
 		return;
 	}
 
-	rpthread_listItem* item = (*queuePtr);
+	rpthread_listItem_t* item = (*queuePtr);
+	//If listItem has a lower priority than the itemPtr
+	hasLowerPriority = (
+		(
+			*(
+				(*item).block
+			)
+		).priority
+		>
+		(
+			*(
+				(*listItem).block
+			)
+		).priority
+	);
+
 	//Iterate until next has been in use longer than listItem
-	while (*((*((*item).next)).block).priority > (*((*listItem).block)).priority) {
+	while (hasLowerPriority) {
 		item = (*item).next;
+		hasLowerPriority = (
+			(
+				*(
+					(*item).block
+				)
+			).priority
+			>
+			(
+				*(
+					(*listItem).block
+				)
+			).priority
+		);
 	}
 
 	//Insert listItem

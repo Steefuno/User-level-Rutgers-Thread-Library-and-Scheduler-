@@ -14,6 +14,7 @@
 
 /* include lib header files that you need here: */
 #include <unistd.h>
+#include <ucontext.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -73,10 +74,10 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 int rpthread_yield();
 
 /* keep tcb, but deallocated the current context and stack */
-void deallocContext();
+void deallocContext(rpthread_listItem_t* listItem);
 
 /* deallocate the tcb */
-void deallocTCB();
+void deallocTCB(rpthread_listItem_t* listItem);
 
 /* terminate a thread */
 void rpthread_exit(void *value_ptr);
@@ -96,11 +97,20 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex);
 /* destroy the mutex */
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex);
 
+/* helper function to convert void* (*function)(void*) to void* (*function)(void*) */
+void makecontextHelper(void* (*selectFunction)(void*), void* selectArg);
+
 /* scheduler */
 static void schedule();
 
 /* handle swapping out of a tcb if interrupted sctf */
 void stcfProceedByInterrupt();
+
+/* scheduler if stcf mode*/
+void sched_stcf();
+
+/* scheduler if mlfq mode */
+void sched_mlfq();
 
 /* initialize scheduler */
 void initScheduler();
