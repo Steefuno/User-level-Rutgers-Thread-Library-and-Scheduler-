@@ -58,12 +58,12 @@ typedef struct rpthread_mutex_t {
 ucontext_t* schedulerContext;
 
 /* TCB for main code */
-static tcb* mainTCB;
+tcb* mainTCB;
 
-static rpthread_listItem_t* rpthread_threadList; //Used in PSJF
-static rpthread_listItem_t** rpthread_MLFQ; //rpthread_MLFQ[0] is top level, used in MLFQ scheduling
+rpthread_listItem_t* rpthread_threadList; //Used in PSJF
+rpthread_listItem_t** rpthread_MLFQ; //rpthread_MLFQ[0] is top level, used in MLFQ scheduling
 
-static struct timeval prevTick; //Stores when the most recent thread started
+struct timeval prevTick; //Stores when the most recent thread started
 
 /* Function Declarations: */
 
@@ -162,7 +162,7 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 #define THREADSTACKSIZE 8192 //size of stack for a created thread
 #define SCHEDULERSTACKSIZE 2048 
 #define TICKSEC 0
-#define TICKUSEC 20000 //picoseconds of time for timer to end, 1000 is 1ms
+#define TICKUSEC 1000 //picoseconds of time for timer to end, 1000 is 1ms
 #define MLFQLEVELS 8 //number of levels in mlfq
 
 #endif
