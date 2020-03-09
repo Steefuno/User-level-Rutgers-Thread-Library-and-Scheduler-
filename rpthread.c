@@ -22,6 +22,8 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	// Initialize scheduler if NULL
 	if (schedulerContext == NULL) initScheduler();
 
+	//printf("Creating thread\n");
+
 	// Create Thread Control Block
 	tcb* threadBlock = (tcb*)malloc(sizeof(tcb));
 	(*threadBlock).status = SCHEDULED;
@@ -42,8 +44,9 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 
 	// add new tcb into queue
 	rpthread_listItem_t* listItem = insertIntoScheduler(threadBlock);
-	thread = (rpthread_t*) listItem; //thread will reference the listItem
-	
+	*thread = (rpthread_t)listItem; //thread will reference the listItem as a rpthread_t
+	printf("Created Thread: %d\n", thread);
+
 	// not sure what this should return
 	return 1;
 };
@@ -57,8 +60,8 @@ int rpthread_yield() {
 	proceedState = PROCEEDBYYIELD;
 	swapcontext(
 		&(
-			(*
-				((*currentItem).block)
+			(
+				*((*currentItem).block)
 			).context
 		),
 		schedulerContext
@@ -70,6 +73,7 @@ int rpthread_yield() {
 // To be used after pthread_exit in scheduler
 void deallocContext(rpthread_listItem_t* listItem) {
 	// Deallocate the stack
+	printf("DeallocContextStack\n");
 	free((*((*listItem).block)).stack);
 
 	// Dereferences the stack
@@ -82,6 +86,7 @@ void deallocContext(rpthread_listItem_t* listItem) {
 // To be used when joined
 void deallocTCB(rpthread_listItem_t* listItem) {
 	//Frees block
+	printf("DeallocTCB\n");
 	free((*listItem).block);
 
 	//Frees listItem
@@ -96,6 +101,7 @@ void rpthread_exit(void *value_ptr) {
 	proceedState = PROCEEDBYFINISH;
 
 	// Setcontext to scheduler to handle deallocate context
+	printf("Exiting to scheduler\n");
 	setcontext(schedulerContext);
 };
 
@@ -108,6 +114,8 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	// Get listItem for thread
 	rpthread_listItem_t* toJoinItem = (rpthread_listItem_t*)thread;
 	tcb* block = (*toJoinItem).block;
+
+	printf("Joining for %d\n", toJoinItem);
 
 	// Position to revert to when given time in scheduler
 	getcontext(
@@ -125,8 +133,12 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 		setcontext(schedulerContext);
 	}
 
+	printf("Thread completed, deallocating\n");
+
 	// Deallocate the ended block
 	deallocTCB(toJoinItem);
+
+	printf("Deallocated\n");
 
 	// Continue current
 	return 1;
@@ -259,6 +271,7 @@ void stcfProceedByInterrupt() {
 
 	// Reposition current in queue
 	// If current is the only thing in the list
+	//printf("Is threadList NULL? %d\n", rpthread_threadList == NULL);
 	if (rpthread_threadList == NULL
 		//Or if current has a lower priority than first in list
 		|| (*(*rpthread_threadList).block).priority > (*(*currentItem).block).priority) {
@@ -270,11 +283,14 @@ void stcfProceedByInterrupt() {
 		rpthread_listItem_t* listItem = rpthread_threadList;
 
 		//While not at end of queue
+		printf("Inserted at .");
 		while ((*listItem).next != NULL
 			//And if next item has lower time than current
 			&& (*(*((*listItem).next)).block).priority < (*(*currentItem).block).priority) {
 			listItem = (*listItem).next;
+			printf(".");
 		}
+		printf("Current\n");
 
 		// Either at end of list or next item is bigger than current
 		// So set current in between
@@ -288,19 +304,27 @@ void stcfProceedByInterrupt() {
 void sched_stcf() {
 	/* Handle current tcb */
 
+	// Pause timer	
+	setitimer(ITIMER_VIRTUAL, &schedulerTimer, NULL);
+
 	if (proceedState == PROCEEDBYTIMER) { // If interrupted by timer
+		//printf("Proceeding by timer\n");
 		stcfProceedByInterrupt();
 		(*(*currentItem).block).status = SCHEDULED;
 	} else if (proceedState == PROCEEDBYYIELD) { // If interrupted by yielding
+		//printf("Proceeding by yield\n");
 		stcfProceedByInterrupt();
 		(*(*currentItem).block).status = READY;
 	} else if (proceedState == PROCEEDBYMUTEX) { //If blocked by mutex
+		//printf("Proceeding by mutex\n");
 		stcfProceedByInterrupt();
 		(*(*currentItem).block).status = BLOCKED;
 	} else if (proceedState == PROCEEDBYJOIN) { //If waiting to join on a thread
+		//printf("Proceeding by join\n");
 		stcfProceedByInterrupt();
 		(*(*currentItem).block).status = BLOCKED;
 	} else { // If current has ended or exited, proceedState == PROCEEDBYFINISH
+		//printf("Proceeding by finish\n");
 		deallocContext(currentItem);
 		(*(*currentItem).block).status = ENDED;
 	}
@@ -361,6 +385,7 @@ void initScheduler () {
 
 	ucontext_t* context = &((*mainTCB).context);
 	getcontext(context);
+
 	(*mainTCB).stack = (*context).uc_stack.ss_sp;
 	
 	//Insert mainTCB into queue
@@ -381,6 +406,8 @@ void initScheduler () {
 
 	//Start timer
 	setitimer(ITIMER_VIRTUAL, &schedulerTimer, NULL);
+
+	printf("Scheduler Initialized MainTCB is: %d\n", mainTCB);
 
 	//Return to adding thread
 	return;
@@ -415,7 +442,8 @@ rpthread_listItem_t* insertIntoScheduler(tcb* threadBlock) {
 }
 
 /* Insert into rpthread_threadList */
-void insertIntoSTCF(rpthread_listItem_t* listItem) {	
+void insertIntoSTCF(rpthread_listItem_t* listItem) {
+	printf("Inserting into STCF queue\n");
 	insertIntoSTCFQueue(listItem, &rpthread_threadList);
 	return;
 }
@@ -447,6 +475,7 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 
 	//If queue DNE
 	if (*queuePtr == NULL) {
+		printf("Set as head\n");
 		(*queuePtr) = listItem;
 		return;
 	}
@@ -465,13 +494,17 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 			)
 		).priority
 	);
+
+	printf("Set as ");
 	if (hasLowerPriority) {
 		//Set listItem as first in queue
 		(*listItem).next = (*queuePtr);
 		(*queuePtr) = listItem;
+		printf("o\n");
 		return;
 	}
 
+	printf(".");
 	rpthread_listItem_t* item = (*queuePtr);
 	//If listItem has a lower priority than the itemPtr
 	hasLowerPriority = (
@@ -490,6 +523,7 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 
 	//Iterate until next has been in use longer than listItem
 	while (hasLowerPriority) {
+		printf(".");
 		item = (*item).next;
 		hasLowerPriority = (
 			(
@@ -507,6 +541,7 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 	}
 
 	//Insert listItem
+	printf("o\n");
 	(*listItem).next = (*item).next;
 	(*item).next = listItem;
 	return;

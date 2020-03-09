@@ -58,12 +58,12 @@ typedef struct rpthread_mutex_t {
 ucontext_t* schedulerContext;
 
 /* TCB for main code */
-tcb* mainTCB;
+static tcb* mainTCB;
 
-rpthread_listItem_t* rpthread_threadList; //Used in PSJF
-rpthread_listItem_t** rpthread_MLFQ; //rpthread_MLFQ[0] is top level, used in MLFQ scheduling
+static rpthread_listItem_t* rpthread_threadList; //Used in PSJF
+static rpthread_listItem_t** rpthread_MLFQ; //rpthread_MLFQ[0] is top level, used in MLFQ scheduling
 
-struct timeval prevTick; //Stores when the most recent thread started
+static struct timeval prevTick; //Stores when the most recent thread started
 
 /* Function Declarations: */
 
