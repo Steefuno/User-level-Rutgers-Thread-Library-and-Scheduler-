@@ -16,6 +16,7 @@ static rpthread_listItem_t* currentItem = NULL;
  */
 static int proceedState = 0; //How the previous thread has closed
 void *(*makeFunction)(void*) = NULL; //Pointer to function to use makecontext on
+int currentLevel = 0;
 
 rpthread_listItem_t* rpthread_threadList = NULL;
 
@@ -396,8 +397,82 @@ void sched_stcf() {
 }
 
 /* Preemptive MLFQ scheduling algorithm */
+//Note: currently executing thread is always stored at the front of the MLFQ linked list
 void sched_mlfq() {
-	// If 
+	//Pause Timer
+	setitimer(ITIMER_VIRTUAL, &schedulerTimer, NULL);
+
+	//set status, print info
+	//printf("Current: %d, Head: %d\n", currentItem, rpthread_threadList);
+	if (proceedState == PROCEEDBYTIMER) { // If interrupted by timer
+		if (rpthread_n < 5) 
+			printf("\tProceeding by timer\n");
+		//stcfProceedByInterrupt();
+		(*(*currentItem).block).status = SCHEDULED;
+	} else if (proceedState == PROCEEDBYYIELD) { // If interrupted by yielding
+		if (rpthread_n < 5) 
+			printf("\tProceeding by yield\n");
+		//stcfProceedByInterrupt();
+		(*(*currentItem).block).status = READY;
+	} else if (proceedState == PROCEEDBYMUTEX) { //If blocked by mutex
+		if (rpthread_n < 5) 
+			printf("\tProceeding by mutex\n");
+		//stcfProceedByInterrupt();
+		(*(*currentItem).block).status = BLOCKED;
+	} else if (proceedState == PROCEEDBYJOIN) { //If waiting to join on a thread
+		if (rpthread_n < 5) 
+			printf("\tProceeding by join\n");
+		//stcfProceedByInterrupt();
+		(*(*currentItem).block).status = BLOCKED;
+	} else { // If current has ended or exited, proceedState == PROCEEDBYFINISH
+		if (rpthread_n < 5) 
+			printf("\tProceeding by finish\n");
+		//deallocContext(currentItem);
+		//(*(*currentItem).block).status = ENDED;
+	}
+
+	
+	//printf("begin sched_mlfq %d\n",currentItem);	
+	//remove currentItem from front of queue, unless queue is empty (first thread to be entered into queue)
+	if(rpthread_MLFQ[currentLevel] != NULL)
+		rpthread_MLFQ[currentLevel] = rpthread_MLFQ[currentLevel]->next;
+
+	//If full time slice used and not already at the lowest level, move down a level
+	if(proceedState == PROCEEDBYTIMER && currentLevel != (MLFQLEVELS-1)){
+		//currentLevel++;
+	}
+	
+	//if not finished, add thread back to queue
+	if(proceedState==PROCEEDBYFINISH){
+		deallocContext(currentItem);
+		currentItem->block->status = ENDED;
+	}else{
+		insertIntoMLFQ(currentItem, currentLevel);
+	}
+
+	//pick next thread to execute, store in currentItem
+	int i=0;
+	while(rpthread_MLFQ[i]==NULL)
+		i++;
+
+	//this should never happen because MLFQ should never be empty
+	if(i==MLFQLEVELS){
+		printf("ERROR: MLFQ EMPTY\n");
+		return;
+	}
+
+	currentItem = rpthread_MLFQ[i];
+	
+	proceedState = ENDED;
+
+	//set new timer
+	setitimer(ITIMER_VIRTUAL, &schedulerTimer, NULL);
+
+	//printf("end sched_mlfq\n");
+	//start executing new thread
+	setcontext(&(currentItem->block->context));
+
+	
 }
 
 /* Setup scheduler context */
@@ -474,7 +549,7 @@ rpthread_listItem_t* insertIntoScheduler(tcb* threadBlock) {
 	#ifndef MLFQ //If STCF
 		insertIntoSTCF(listItem);
 	#else //If MLFQ
-		insertIntoMLFQ(listItem);
+		insertIntoMLFQ(listItem,0);
 	#endif
 
 	return listItem;
@@ -488,7 +563,7 @@ void insertIntoSTCF(rpthread_listItem_t* listItem) {
 }
 
 /* Append into rpthread_MLFQ[0] */
-void insertIntoMLFQ(rpthread_listItem_t* listItem, int selectLevel) {
+void insertIntoMLFQ(rpthread_listItem_t* listItem,int selectLevel) {
 	(*listItem).next = NULL;
 
 	//If not setup yet, create levels
@@ -502,8 +577,22 @@ void insertIntoMLFQ(rpthread_listItem_t* listItem, int selectLevel) {
 		}
 	}
 
-	//Insert into MLFQ queue at select level
-	insertIntoSTCFQueue(listItem, &(rpthread_MLFQ[selectLevel]));
+	//Insert into MLFQ queue at end of select level
+	rpthread_listItem_t* ptr = rpthread_MLFQ[selectLevel];
+	if(ptr==NULL){
+		rpthread_MLFQ[selectLevel] = listItem;
+	}else{
+
+	 while(ptr!=NULL){
+		if(ptr->next == NULL){
+			ptr->next = listItem;
+			break;
+		}
+		ptr = ptr->next;
+	}
+	
+	}
+
 	return;
 }
 
