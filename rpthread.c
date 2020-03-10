@@ -144,8 +144,7 @@ int rpthread_mutex_init(rpthread_mutex_t *mutex, const pthread_mutexattr_t *mute
 	// Initialize data structures for this mutex
 	// Ignore mutexattr
 
-	// Allocate mutex and set thread as NULL
-	mutex = (rpthread_mutex_t*)malloc(sizeof(rpthread_mutex_t));
+	// Set thread as NULL, mutex already allocated
 	(*mutex).thread = NULL;
 
 	// Continue current
@@ -158,10 +157,16 @@ int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
 	// When the mutex is acquired successfully, enter the critical section
 	// If acquiring mutex fails, push current thread into block list and 
 	// context switch to the scheduler thread
+	if ((*mutex).thread == (rpthread_listItem_t*)1) {
+		// Error
+		printf("Cannot lock a destroyed muted\n");
+		return 0;
+	}
 
 	// Ignore if already locked by current thread
 	if ((*mutex).thread == currentItem) {
 		// Should error
+		printf("Cannot lock if already locked by this thread\n");
 		return 0;
 	}
 
@@ -176,12 +181,14 @@ int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
 
 	// If mutex is occupied
 	if ((*mutex).thread != NULL) {
+		printf("Current %d is blocked by mutex %d\n", currentItem, mutex);
 		proceedState = PROCEEDBYJOIN;
 		// go to scheduler
  		setcontext(schedulerContext);
 	}
 
 	// Set mutex's thread to current
+	printf("Locking mutex %d with %d\n", mutex, currentItem);
 	(*mutex).thread = currentItem;
 
 	// Continue current
@@ -193,13 +200,20 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex) {
 	// Release mutex and make it available again. 
 	// Put threads in block list to run queue 
 	// so that they could compete for mutex later.
+	if ((*mutex).thread == (rpthread_listItem_t*)1) {
+		// Error
+		printf("Cannot unlock a destroyed muted\n");
+		return 0;
+	}
 
 	if ((*mutex).thread != currentItem) {
 		// Should error
+		printf("Cannot unlock when locked by another thread\n");
 		return 0;
 	}
 
 	// Remove current from mutex
+	printf("Unlocking mutex %d\n", mutex);
 	(*mutex).thread = NULL;
 
 	// Continue current
@@ -210,13 +224,19 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex) {
 /* destroy the mutex */
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex) {
 	// Deallocate dynamic memory created in rpthread_mutex_init
-
-	if ((*mutex).thread != NULL && (*mutex).thread != currentItem) {
-		// Should error
+	if ((*mutex).thread == (rpthread_listItem_t*)1) {
+		// Error
+		printf("Cannot destroy a destroyed muted\n");
 		return 0;
 	}
 
-	free(mutex);
+	if ((*mutex).thread != NULL && (*mutex).thread != currentItem) {
+		// Should error
+		printf("Cannot destroy when locked by another thread\n");
+		return 0;
+	}
+
+	(*mutex).thread = (rpthread_listItem_t*)1;
 
 	return 1;
 };
