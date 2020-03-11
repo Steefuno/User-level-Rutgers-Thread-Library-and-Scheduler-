@@ -316,7 +316,7 @@ void sched_stcf() {
 	/* Handle current tcb */
 
 	// Pause timer	
-	setitimer(ITIMER_PROF, &schedulerTimer, NULL);
+	//setitimer(ITIMER_PROF, &schedulerTimer, NULL);
 
 	//printf("Current: %d, Head: %d\n", currentItem, rpthread_threadList);
 	if (proceedState == PROCEEDBYTIMER) { // If interrupted by timer
@@ -500,10 +500,10 @@ void initScheduler () {
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = &swapToScheduler;
-	//Setup sigaction to trigger on SIGVTALRM
-	sigaction(SIGVTALRM, &sa, NULL);
+	//Setup sigaction to trigger on SIGPROF
+	sigaction(SIGPROF, &sa, NULL);
 
-	//Trigger SIGVTALRM every TICKSEC + TICKUSEC
+	//Trigger SIGPROF every TICKSEC + TICKUSEC
 	schedulerTimer.it_value.tv_sec = TICKSEC;
 	schedulerTimer.it_value.tv_usec = TICKUSEC;
 
