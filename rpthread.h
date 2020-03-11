@@ -51,6 +51,9 @@ typedef struct rpthread_mutex_t {
 	// NULL if unlocked
 	rpthread_listItem_t* thread;
 
+	// linked list of threads blocked
+	rpthread_listItem_t* blocked;
+
 	// ...
 } rpthread_mutex_t;
 
@@ -130,6 +133,9 @@ void insertIntoMLFQ(rpthread_listItem_t* listItem, int selectLevel);
 /* add into Yielding queue, used in both schedulers */
 //queuePtr is a pointer to the pointer that points at the first item in the linked list
 void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** queuePtr);
+
+/* moves threads blocked by mutex back into queue */
+void restoreBlockedToQueue(rpthread_mutex_t* mutex);
 
 #ifdef USE_RTHREAD
 #define pthread_t rpthread_t

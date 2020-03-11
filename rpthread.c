@@ -15,6 +15,7 @@ static rpthread_listItem_t* currentItem = NULL;
  * 2 if mutex blocked
  */
 static int proceedState = 0; //How the previous thread has closed
+static rpthread_mutex_t* proceedMutex = NULL; //The mutex if proceedState is PROCEEDBYMUTEX
 void *(*makeFunction)(void*) = NULL; //Pointer to function to use makecontext on
 int currentLevel = 0;
 
@@ -173,20 +174,13 @@ int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
 		return 0;
 	}
 
-	// Position to revert to when given time in scheduler
-	getcontext(
-		&(
-			(
-				*((*currentItem).block)
-			).context
-		)
-	);
-
 	// If mutex is occupied
 	if ((*mutex).thread != NULL) {
-		proceedState = PROCEEDBYJOIN;
-		// go to scheduler
- 		setcontext(schedulerContext);
+		proceedState = PROCEEDBYMUTEX;
+		proceedMutex = mutex;
+
+		// go to scheduler to be temp removed from queue
+		swapcontext(&((*(*currentItem).block).context), schedulerContext);
 	}
 
 	// Set mutex's thread to current
@@ -209,12 +203,15 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex) {
 
 	if ((*mutex).thread != currentItem) {
 		// Should error
-		printf("Cannot unlock when locked by another thread\n");
+		printf("Cannot unlock when locked by another thread %d %d\n", (*mutex).thread, currentItem);
 		return 0;
 	}
 
 	// Remove current from mutex
 	(*mutex).thread = NULL;
+
+	// Add all blocked back to queue
+	restoreBlockedToQueue(mutex);
 
 	// Continue current
 	return 1;
@@ -230,9 +227,9 @@ int rpthread_mutex_destroy(rpthread_mutex_t *mutex) {
 		return 0;
 	}
 
-	if ((*mutex).thread != NULL && (*mutex).thread != currentItem) {
+	if ((*mutex).thread != NULL) {
 		// Should error
-		printf("Cannot destroy when locked by another thread\n");
+		printf("Cannot destroy when locked\n");
 		return 0;
 	}
 
@@ -311,14 +308,25 @@ void stcfProceedByInterrupt() {
 	return;
 }
 
+/* Adds current to mutex's blocked list */
+void stcfProceedByMutex() {
+	rpthread_mutex_t* mutex = proceedMutex;
+
+	// Make current the head of blocked and current head as next
+	(*currentItem).next = (*mutex).blocked;
+	(*mutex).blocked = currentItem;
+	// Don't enqueue curentItem
+	return;
+}
+
 /* Preemptive SJF (STCF) scheduling algorithm */
 void sched_stcf() {
 	/* Handle current tcb */
 
 	// Pause timer	
-	//setitimer(ITIMER_PROF, &schedulerTimer, NULL);
+	setitimer(ITIMER_PROF, &schedulerTimer, NULL);
 
-	//printf("Current: %d, Head: %d\n", currentItem, rpthread_threadList);
+//	printf("Current: %d, Head: %d\n", currentItem, rpthread_threadList);
 	if (proceedState == PROCEEDBYTIMER) { // If interrupted by timer
 		if (rpthread_n < 5) 
 			printf("\t%d Proceeding by timer\n", currentItem);
@@ -330,9 +338,9 @@ void sched_stcf() {
 		stcfProceedByInterrupt();
 		(*(*currentItem).block).status = READY;
 	} else if (proceedState == PROCEEDBYMUTEX) { //If blocked by mutex
-//		if (rpthread_n)
-//			printf("\tProceeding by mutex\n");
-		stcfProceedByInterrupt();
+//		if (rpthread_n < 5)
+			printf("\tProceeding by mutex\n");
+		stcfProceedByMutex();
 		(*(*currentItem).block).status = BLOCKED;
 	} else if (proceedState == PROCEEDBYJOIN) { //If waiting to join on a thread
 		//if (rpthread_n)
@@ -538,7 +546,7 @@ rpthread_listItem_t* insertIntoScheduler(tcb* threadBlock) {
 	#ifndef MLFQ //If STCF
 		insertIntoSTCF(listItem);
 	#else //If MLFQ
-		insertIntoMLFQ(listItem,0);
+		insertIntoMLFQ(listItem, 0);
 	#endif
 
 	return listItem;
@@ -672,6 +680,22 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 	(*listItem).next = (*item).next;
 	(*item).next = listItem;
 	return;
+}
+
+void restoreBlockedToQueue(rpthread_mutex_t* mutex) {
+	//Pop and add each to queue
+	while ((*mutex).blocked != NULL) {
+		//Pop
+		rpthread_listItem_t* listItem = (*mutex).blocked;
+		(*mutex).blocked = (*(*mutex).blocked).next;
+
+		//Return to queue
+		#ifndef MLFQ //If STCF
+			insertIntoSTCF(listItem);
+		#else //If MLFQ
+			insertIntoMLFQ(listItem, 0); //might need to adjust this
+		#endif
+	}
 }
 
 // Feel free to add any other functions you need
