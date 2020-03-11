@@ -162,7 +162,7 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 #define THREADSTACKSIZE 8192 //size of stack for a created thread
 #define SCHEDULERSTACKSIZE 2048 
 #define TICKSEC 0
-#define TICKUSEC 1000 //picoseconds of time for timer to end, 1000 is 1ms
+#define TICKUSEC 2500 //picoseconds of time for timer to end, 1000 is 1ms
 #define MLFQLEVELS 8 //number of levels in mlfq
 
 #endif
