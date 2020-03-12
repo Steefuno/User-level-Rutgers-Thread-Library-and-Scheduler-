@@ -262,9 +262,8 @@ static void schedule() {
 	#endif
 }
 
-/* Handle current if scheduler is triggered by interrupt */
-// Add back to queue and adjust priority
-void stcfProceedByInterrupt() {
+/* adjust's the currentItem's priority by the change in time */
+void stcfAdjustPriority() {
 	// Get time since current started
 	struct timeval timeEnd;
 	gettimeofday(&timeEnd, 0);
@@ -277,6 +276,13 @@ void stcfProceedByInterrupt() {
 			+ (timeEnd.tv_usec-prevTick.tv_usec)
 		)
 	);
+}
+
+/* Handle current if scheduler is triggered by interrupt */
+// Add back to queue and adjust priority
+void stcfProceedByInterrupt() {
+	// Increment current's time
+	stcfAdjustPriority();
 
 	// Set status to ready
 	(*(*currentItem).block).status = SCHEDULED;
@@ -310,6 +316,9 @@ void stcfProceedByInterrupt() {
 
 /* Adds current to mutex's blocked list */
 void stcfProceedByMutex() {
+	// Increment current's time
+	stcfAdjustPriority();
+
 	rpthread_mutex_t* mutex = proceedMutex;
 
 	// Make current the head of blocked and current head as next

@@ -1,8 +1,11 @@
 // File:	rpthread_t.h
 
 // List all group member's name:
+	
 // username of iLab:
+	
 // iLab Server:
+	
 
 #ifndef RTHREAD_T_H
 #define RTHREAD_T_H
@@ -148,6 +151,8 @@ void restoreBlockedToQueue(rpthread_mutex_t* mutex);
 #define pthread_mutex_unlock rpthread_mutex_unlock
 #define pthread_mutex_destroy rpthread_mutex_destroy
 
+#endif
+
 //TCB States
 #define RUNNING 0 //Current TCB
 #define SCHEDULED 1 //Enqueued
@@ -170,7 +175,5 @@ void restoreBlockedToQueue(rpthread_mutex_t* mutex);
 #define TICKSEC 0
 #define TICKUSEC 2500 //picoseconds of time for timer to end, 1000 is 1ms
 #define MLFQLEVELS 8 //number of levels in mlfq
-
-#endif
 
 #endif
