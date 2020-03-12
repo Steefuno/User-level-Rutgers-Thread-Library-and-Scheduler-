@@ -101,7 +101,7 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex);
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex);
 
 /* helper function to convert void* (*function)(void*) to void* (*function)(void*) */
-void makecontextHelper(void* (*selectFunction)(void*), void* selectArg);
+void makecontextHelper();
 
 /* scheduler */
 static void schedule();

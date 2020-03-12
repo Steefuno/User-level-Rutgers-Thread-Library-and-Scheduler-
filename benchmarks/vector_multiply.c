@@ -26,6 +26,7 @@ void vector_multiply(void* arg) {
 		pthread_mutex_unlock(&mutex);	
 	}
 	printf("END THEAD EXECUTE\n");
+	pthread_exit(NULL);
 }
 
 void verify() {

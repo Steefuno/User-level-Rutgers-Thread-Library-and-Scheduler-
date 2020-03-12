@@ -32,6 +32,7 @@ void parallel_calculate(void* arg) {
 		sum += pSum[j];
 		pthread_mutex_unlock(&mutex);
 	}
+	pthread_exit(NULL);
 }
 
 
