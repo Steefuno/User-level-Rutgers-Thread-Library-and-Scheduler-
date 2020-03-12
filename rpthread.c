@@ -49,7 +49,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void *(*function
 	// add new tcb into queue
 	rpthread_listItem_t* listItem = insertIntoScheduler(threadBlock);
 	*thread = (rpthread_t)listItem; //thread will reference the listItem as a rpthread_t
-	printf("\tCreated Thread: %d\n", *thread);
+//	printf("\tCreated Thread: %d\n", *thread);
 
 	// not sure what this should return
 	return 1;
@@ -116,7 +116,7 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	rpthread_listItem_t* toJoinItem = (rpthread_listItem_t*)thread;
 	tcb* block = (*toJoinItem).block;
 
-	printf("\tJoining for %d\n", toJoinItem);
+//	printf("\tJoining for %d\n", toJoinItem);
 
 	// Position to revert to when given time in scheduler
 	getcontext(
@@ -134,7 +134,7 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 		setcontext(schedulerContext);
 	}
 
-	printf("\tThread completed, deallocating %d\n", toJoinItem);
+//	printf("\tJoined %d\n", toJoinItem);
 
 	// Deallocate the ended block
 	deallocTCB(toJoinItem);
@@ -164,14 +164,14 @@ int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
 	if ((*mutex).thread == (rpthread_listItem_t*)1) {
 		// Error
 		printf("\tCannot lock a destroyed muted\n");
-		return 0;
+		exit(0);
 	}
 
 	// Ignore if already locked by current thread
 	if ((*mutex).thread == currentItem) {
 		// Should error
 		printf("\tCannot lock if already locked by this thread\n");
-		return 0;
+		exit(0);
 	}
 
 	// If mutex is occupied
@@ -198,13 +198,13 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex) {
 	if ((*mutex).thread == (rpthread_listItem_t*)1) {
 		// Error
 		printf("\tCannot unlock a destroyed muted\n");
-		return 0;
+		exit(0);
 	}
 
 	if ((*mutex).thread != currentItem) {
 		// Should error
 		printf("\tCannot unlock when locked by another thread %d %d\n", (*mutex).thread, currentItem);
-		return 0;
+		exit(0);
 	}
 
 	// Remove current from mutex
@@ -224,13 +224,13 @@ int rpthread_mutex_destroy(rpthread_mutex_t *mutex) {
 	if ((*mutex).thread == (rpthread_listItem_t*)1) {
 		// Error
 		printf("\tCannot destroy a destroyed muted\n");
-		return 0;
+		exit(0);
 	}
 
 	if ((*mutex).thread != NULL) {
 		// Should error
 		printf("\tCannot destroy when locked\n");
-		return 0;
+		exit(0);
 	}
 
 	(*mutex).thread = (rpthread_listItem_t*)1;
@@ -327,28 +327,18 @@ void sched_stcf() {
 	setitimer(ITIMER_PROF, &schedulerTimer, NULL);
 
 	if (proceedState == PROCEEDBYTIMER) { // If interrupted by timer
-		if (rpthread_n < 5) 
-			printf("\t%d Proceeding by timer\n", currentItem);
 		stcfProceedByInterrupt();
 		(*(*currentItem).block).status = SCHEDULED;
 	} else if (proceedState == PROCEEDBYYIELD) { // If interrupted by yielding
-//		if (rpthread_n < 5)
-			printf("\tProceeding by yield\n");
 		stcfProceedByInterrupt();
 		(*(*currentItem).block).status = READY;
 	} else if (proceedState == PROCEEDBYMUTEX) { //If blocked by mutex
-//		if (rpthread_n < 5)
-			printf("\tProceeding by mutex\n");
 		stcfProceedByMutex();
 		(*(*currentItem).block).status = BLOCKED;
 	} else if (proceedState == PROCEEDBYJOIN) { //If waiting to join on a thread
-		//if (rpthread_n)
-			printf("\tProceeding by join\n");
 		stcfProceedByInterrupt();
 		(*(*currentItem).block).status = BLOCKED;
 	} else { // If current has ended or exited, proceedState == PROCEEDBYFINISH
-//		if (rpthread_n < 5)
-			printf("\tProceeding by exit\n");
 		deallocContext(currentItem);
 		(*(*currentItem).block).status = ENDED;
 	}
@@ -367,18 +357,12 @@ void sched_stcf() {
 	// Assume queue has atleast one item, should be main function atleast
 	// Pop from queue
 
-//	if (rpthread_n > 5)
-//		printf("Prev: %d, ", currentItem);
-
 	currentItem = rpthread_threadList;
 	rpthread_threadList = (*rpthread_threadList).next;
 	// Ignore checking state, unneccessary
 
 	// Set to Running state
 	(*(*currentItem).block).status = RUNNING;
-
-	if (rpthread_n > 5)
-		rpthread_n++;
 
 	// SetContext new item
 	setcontext(
@@ -397,32 +381,16 @@ void sched_mlfq() {
 	setitimer(ITIMER_PROF, &schedulerTimer, NULL);
 
 	//set status, print info
-	//printf("Current: %d, Head: %d\n", currentItem, rpthread_threadList);
 	if (proceedState == PROCEEDBYTIMER) { // If interrupted by timer
-//		if (rpthread_n < 5) 
-//			printf("\tProceeding by timer\n");
-		//stcfProceedByInterrupt();
 		(*(*currentItem).block).status = SCHEDULED;
 	} else if (proceedState == PROCEEDBYYIELD) { // If interrupted by yielding
-//		if (rpthread_n < 5) 
-//			printf("\tProceeding by yield\n");
-		//stcfProceedByInterrupt();
 		(*(*currentItem).block).status = READY;
 	} else if (proceedState == PROCEEDBYMUTEX) { //If blocked by mutex
-//		if (rpthread_n < 5) 
-//			printf("\tProceeding by mutex\n");
-		//stcfProceedByInterrupt();
 		(*(*currentItem).block).status = BLOCKED;
 	} else if (proceedState == PROCEEDBYJOIN) { //If waiting to join on a thread
-//		if (rpthread_n < 5) 
-//			printf("\tProceeding by join\n");
-		//stcfProceedByInterrupt();
 		(*(*currentItem).block).status = BLOCKED;
 	} else { // If current has ended or exited, proceedState == PROCEEDBYFINISH
-		if (rpthread_n < 5) 
-			printf("\tProceeding by finish\n");
-		//deallocContext(currentItem);
-		//(*(*currentItem).block).status = ENDED;
+		printf("\tProceeding by finish\n");
 	}
 
 	
@@ -515,7 +483,7 @@ void initScheduler () {
 	//Start timer
 	setitimer(ITIMER_PROF, &schedulerTimer, NULL);
 
-	printf("\tScheduler Initialized, MainTCB is: %d, Head is: %d\n", mainListItem, rpthread_threadList);
+//	printf("\tScheduler Initialized, MainTCB is: %d, Head is: %d\n", mainListItem, rpthread_threadList);
 
 	//Return to adding thread
 	return;
@@ -551,8 +519,6 @@ rpthread_listItem_t* insertIntoScheduler(tcb* threadBlock) {
 
 /* Insert into rpthread_threadList */
 void insertIntoSTCF(rpthread_listItem_t* listItem) {
-//	if (rpthread_n < 5) 
-//		printf("\tInserting into STCF queue, ");
 	insertIntoSTCFQueue(listItem, &rpthread_threadList);
 	return;
 }
@@ -596,13 +562,8 @@ void insertIntoMLFQ(rpthread_listItem_t* listItem,int selectLevel) {
 void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** queuePtr) {
 	(*listItem).next = NULL;
 
-//	if (rpthread_n < 5) 
-//		printf("Head: %d, ", *queuePtr);
-
 	//If queue DNE
 	if (*queuePtr == NULL) {
-//		if (rpthread_n < 5) 
-//			printf("Set as o\n");
 		(*queuePtr) = listItem;
 		return;
 	}
@@ -622,20 +583,15 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 		).priority
 	);
 
-//	if (rpthread_n < 5) 
-//		printf("Set as ");
 	if (hasLowerPriority) {
 		//Set listItem as first in queue
 		(*listItem).next = (*queuePtr);
 		(*queuePtr) = listItem;
-//		if (rpthread_n < 5) 
-//			printf("o\n");
 		return;
 	}
 
-//	if (rpthread_n < 5) 
-//		printf(".");
 	rpthread_listItem_t* item = (*queuePtr);
+
 	//If listItem has a lower priority than the itemPtr
 	hasLowerPriority = (
 		(
@@ -653,8 +609,6 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 
 	//Iterate until next has been in use longer than listItem
 	while (hasLowerPriority) {
-//		if (rpthread_n < 5) 
-//			printf(".");
 		item = (*item).next;
 		hasLowerPriority = (
 			(
@@ -672,8 +626,6 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 	}
 
 	//Insert listItem
-//	if (rpthread_n < 5) 
-//		printf("o\n");
 	(*listItem).next = (*item).next;
 	(*item).next = listItem;
 	return;
