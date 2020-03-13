@@ -399,8 +399,13 @@ void sched_stcf() {
 /* Preemptive MLFQ scheduling algorithm */
 //Note: currently executing thread is always stored at the front of the MLFQ linked list
 void sched_mlfq() {
-	//Pause Timer
-	setitimer(ITIMER_PROF, &schedulerTimer, NULL);
+	//Pause Timeri
+	//setitimer(ITIMER_PROF, &schedulerTimer, NULL);
+
+
+        //remove currentItem from front of queue, unless queue is empty (first thread to be entered into queue)
+                if(rpthread_MLFQ[currentLevel] != NULL)
+                                rpthread_MLFQ[currentLevel] = rpthread_MLFQ[currentLevel]->next;
 
 	//set status, print info
 	if (proceedState == PROCEEDBYTIMER) { // If interrupted by timer
@@ -409,6 +414,13 @@ void sched_mlfq() {
 		(*(*currentItem).block).status = READY;
 	} else if (proceedState == PROCEEDBYMUTEX) { //If blocked by mutex
 		(*(*currentItem).block).status = BLOCKED;
+	
+	        rpthread_mutex_t* mutex = proceedMutex;
+
+        	// Make current the head of blocked and current head as next
+                (*currentItem).next = (*mutex).blocked;
+                (*mutex).blocked = currentItem;
+
 	} else if (proceedState == PROCEEDBYJOIN) { //If waiting to join on a thread
 		(*(*currentItem).block).status = BLOCKED;
 	} else { // If current has ended or exited, proceedState == PROCEEDBYFINISH
@@ -418,8 +430,8 @@ void sched_mlfq() {
 	
 	//printf("begin sched_mlfq %d\n",currentItem);	
 	//remove currentItem from front of queue, unless queue is empty (first thread to be entered into queue)
-	if(rpthread_MLFQ[currentLevel] != NULL)
-		rpthread_MLFQ[currentLevel] = rpthread_MLFQ[currentLevel]->next;
+	//if(rpthread_MLFQ[currentLevel] != NULL)
+	//	rpthread_MLFQ[currentLevel] = rpthread_MLFQ[currentLevel]->next;
 
 
 	usedTimers++;
@@ -446,7 +458,7 @@ void sched_mlfq() {
 	if(proceedState==PROCEEDBYFINISH){
 		deallocContext(currentItem);
 		currentItem->block->status = ENDED;
-	}else{
+	}else if(proceedState!=PROCEEDBYMUTEX){
 		insertIntoMLFQ(currentItem, currentLevel);
 	}
 
@@ -481,8 +493,8 @@ void sched_mlfq() {
 
 	currentLevel = i;
 	currentItem = rpthread_MLFQ[i];
-	//printf("current item: %d\n",currentItem);	
-	//printMLFQ();
+	printf("current item: %d\n",currentItem);	
+	printMLFQ();
 
 	proceedState = ENDED;
 
@@ -753,6 +765,7 @@ void insertIntoSTCFQueue(rpthread_listItem_t* listItem, rpthread_listItem_t** qu
 
 void restoreBlockedToQueue(rpthread_mutex_t* mutex) {
 	//Pop and add each to queue
+	//printf("popping back!\n");
 	while ((*mutex).blocked != NULL) {
 		//Pop
 		rpthread_listItem_t* listItem = (*mutex).blocked;
