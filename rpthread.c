@@ -18,7 +18,7 @@ static int proceedState = 0; //How the previous thread has closed
 static rpthread_mutex_t* proceedMutex = NULL; //The mutex if proceedState is PROCEEDBYMUTEX
 void *(*makeFunction)(void*) = NULL; //Pointer to function to use makecontext on
 int currentLevel = 0;
-
+int usedTimers = 0;
 int rpthread_n = 0;
 
 rpthread_listItem_t* rpthread_threadList = NULL;
@@ -408,9 +408,25 @@ void sched_mlfq() {
 	if(rpthread_MLFQ[currentLevel] != NULL)
 		rpthread_MLFQ[currentLevel] = rpthread_MLFQ[currentLevel]->next;
 
+
+	usedTimers++;
+	if(usedTimers==100){
+		usedTimers=0;
+		boostPriorities();
+	}
+
 	//If full time slice used and not already at the lowest level, move down a level
-	if(proceedState == PROCEEDBYTIMER && currentLevel != (MLFQLEVELS-1)){
-		//currentLevel++;
+	if(proceedState == PROCEEDBYTIMER){
+
+		if(currentLevel != (MLFQLEVELS-1)){
+			currentLevel++;
+		}
+		/*usedTimers++;
+		if(usedTimers==100){
+			usedTimers=0;
+			//printMLFQ();
+			boostPriorities();
+		}*/
 	}
 	
 	//if not finished, add thread back to queue
@@ -422,8 +438,26 @@ void sched_mlfq() {
 	}
 
 	//pick next thread to execute, store in currentItem
+	/*int i=0;
+	int isNotBlocked = 0;
+	while(rpthread_MLFQ[i]==NULL){
+		currentItem = rpthread_MLFQ[i];
+		while(currentItem != NULL){
+			if(currentItem->block->status != BLOCKED){
+				isNotBlocked=1;
+				break;
+			}
+			currentItem = currentItem->next;
+		}
+
+		if(isNotBlocked==1)
+			break;
+
+		i++;
+	}*/
+
 	int i=0;
-	while(rpthread_MLFQ[i]==NULL)
+	while(rpthread_MLFQ[i] == NULL)
 		i++;
 
 	//this should never happen because MLFQ should never be empty
@@ -432,8 +466,11 @@ void sched_mlfq() {
 		return;
 	}
 
+	currentLevel = i;
 	currentItem = rpthread_MLFQ[i];
-	
+	//printf("current item: %d\n",currentItem);	
+	//printMLFQ();
+
 	proceedState = ENDED;
 
 	//set new timer
@@ -444,6 +481,63 @@ void sched_mlfq() {
 	setcontext(&(currentItem->block->context));
 
 	
+}
+
+void printMLFQ(){
+	rpthread_listItem_t* ptr;
+	int i=0;
+	while(i<MLFQLEVELS){
+	
+		ptr = rpthread_MLFQ[i];
+		while(ptr!=NULL){
+			printf("%d ->",ptr->block->status);
+			ptr = ptr->next;
+		}
+		printf("\n");	
+		i++;
+
+	}
+
+}
+
+//move all threads back to top level of MLFQ
+void boostPriorities() {
+
+	rpthread_listItem_t *nextHead, *nextTail;
+
+	int i=0;
+	while(i<MLFQLEVELS){
+
+		if(rpthread_MLFQ[i]!=NULL){
+			nextHead = rpthread_MLFQ[i];
+			break;
+		}
+		i++;
+
+	}
+
+	nextTail = nextHead;
+	
+	while(i<MLFQLEVELS){
+
+		while(nextTail->next != NULL)
+			nextTail = nextTail->next;
+	
+		if(i!=(MLFQLEVELS-1))
+			nextTail->next = rpthread_MLFQ[i+1];	
+		i++;
+	}	
+
+	rpthread_MLFQ[0] = nextHead;
+	i=1;
+	while(i<MLFQLEVELS){
+		rpthread_MLFQ[i] = NULL;
+		i++;
+	}
+
+
+	return;
+
 }
 
 /* Setup scheduler context */
