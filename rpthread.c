@@ -1,8 +1,8 @@
 // File:	rpthread.c
 
-// List all group member's name:
-// username of iLab:
-// iLab Server:
+// List all group member's name: Ethan Febinger, Steven Nguyen
+// username of iLab: eef45, shn27
+// iLab Server: popsicle
 
 #include "rpthread.h"
 

@@ -1,10 +1,10 @@
 // File:	rpthread_t.h
 
-// List all group member's name:
+// List all group member's name: Ethan Febinger, Steven Nguyen
 	
-// username of iLab:
+// username of iLab: eef45, ssh27
 	
-// iLab Server:
+// iLab Server: popsicle
 	
 
 #ifndef RTHREAD_T_H
