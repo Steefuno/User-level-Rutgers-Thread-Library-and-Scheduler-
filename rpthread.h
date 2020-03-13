@@ -173,7 +173,7 @@ void restoreBlockedToQueue(rpthread_mutex_t* mutex);
 #define THREADSTACKSIZE 8192 //size of stack for a created thread
 #define SCHEDULERSTACKSIZE 2048 
 #define TICKSEC 0
-#define TICKUSEC 2500 //picoseconds of time for timer to end, 1000 is 1ms
+#define TICKUSEC 5000 //picoseconds of time for timer to end, 1000 is 1ms
 #define MLFQLEVELS 8 //number of levels in mlfq
 
 #endif

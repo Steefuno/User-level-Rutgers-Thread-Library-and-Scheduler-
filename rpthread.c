@@ -62,6 +62,9 @@ int rpthread_yield() {
 	// Save context of this thread to its thread control block
 	// switch from thread context to scheduler context
 
+	// Pause timer
+	setitimer(ITIMER_PROF, &pausedTimer, NULL);
+
 	proceedState = PROCEEDBYYIELD;
 	swapcontext(
 		&(
@@ -116,30 +119,30 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	// Wait for a specific thread to terminate
 	// De-allocate any dynamic memory created by the joining thread
 
-	// Pause timer
-	setitimer(ITIMER_PROF, &pausedTimer, NULL);
-
 	// Get listItem for thread
 	rpthread_listItem_t* toJoinItem = (rpthread_listItem_t*)thread;
 	tcb* block = (*toJoinItem).block;
 
-	// Position to revert to when given time in scheduler
-	getcontext(
-		&(
-			(
-				*((*currentItem).block)
-			).context
-		)
-	);
-
-	// If still trying to join, go back to scheduler
 	if ((*block).status != ENDED) {
-		proceedState = PROCEEDBYJOIN;
-		// go to scheduler
-		setcontext(schedulerContext);
-	}
+		// Pause timer
+		setitimer(ITIMER_PROF, &pausedTimer, NULL);
 
-//	printf("\tJoined %d\n", toJoinItem);
+		// Position to revert to when given time in scheduler
+		getcontext(
+			&(
+				(
+					*((*currentItem).block)
+				).context
+			)
+		);
+
+		// If still trying to join, go back to scheduler
+		if ((*block).status != ENDED) {
+			proceedState = PROCEEDBYJOIN;
+			// go to scheduler
+			setcontext(schedulerContext);
+		}
+	}
 
 	// Deallocate the ended block
 	deallocTCB(toJoinItem);
