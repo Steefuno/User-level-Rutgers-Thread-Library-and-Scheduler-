@@ -7,7 +7,8 @@
 #include "rpthread.h"
 
 // INITAILIZE ALL YOUR VARIABLES HERE
-static struct itimerval schedulerTimer; //Timer that interrupts threads if threads are too slow
+static struct itimerval schedulerTimer; //Timer's time that interrupts threads if threads are too slow
+static struct itimerval pausedTimer; //Timer's time that is set to 0,0 pauses timer
 static rpthread_listItem_t* currentItem = NULL;
 
 /* 0 if not specified, probably thread ended
@@ -99,6 +100,9 @@ void deallocTCB(rpthread_listItem_t* listItem) {
 
 /* terminate a thread */
 void rpthread_exit(void *value_ptr) {
+	// Pause timer
+	setitimer(ITIMER_PROF, &pausedTimer, NULL);
+
 	// Mark as ended to be joined
 	proceedState = PROCEEDBYFINISH;
 
@@ -112,11 +116,12 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	// Wait for a specific thread to terminate
 	// De-allocate any dynamic memory created by the joining thread
 
+	// Pause timer
+	setitimer(ITIMER_PROF, &pausedTimer, NULL);
+
 	// Get listItem for thread
 	rpthread_listItem_t* toJoinItem = (rpthread_listItem_t*)thread;
 	tcb* block = (*toJoinItem).block;
-
-//	printf("\tJoining for %d\n", toJoinItem);
 
 	// Position to revert to when given time in scheduler
 	getcontext(
@@ -161,26 +166,34 @@ int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
 	// When the mutex is acquired successfully, enter the critical section
 	// If acquiring mutex fails, push current thread into block list and 
 	// context switch to the scheduler thread
-	if ((*mutex).thread == (rpthread_listItem_t*)1) {
-		// Error
-		printf("\tCannot lock a destroyed muted\n");
-		exit(0);
-	}
 
-	// Ignore if already locked by current thread
-	if ((*mutex).thread == currentItem) {
-		// Should error
-		printf("\tCannot lock if already locked by this thread\n");
-		exit(0);
-	}
-
-	// If mutex is occupied
+	// If mutex is unavailable to lock
 	if ((*mutex).thread != NULL) {
+		// Pause timer
+		setitimer(ITIMER_PROF, &pausedTimer, NULL);
+
+		// If mutex is destroyed
+		if ((*mutex).thread == (rpthread_listItem_t*)1) {
+			// Error
+			printf("\tCannot lock a destroyed muted\n");
+			exit(0);
+		}
+
+		// if locked by current thread
+		if ((*mutex).thread == currentItem) {
+			// Should error
+			printf("\tCannot lock if already locked by this thread\n");
+			exit(0);
+		}
+
+		// If mutex is occupied
 		proceedState = PROCEEDBYMUTEX;
 		proceedMutex = mutex;
 
 		// go to scheduler to be temp removed from queue
 		swapcontext(&((*(*currentItem).block).context), schedulerContext);
+
+		// on given back access, continue to lock
 	}
 
 	// Set mutex's thread to current
@@ -331,9 +344,6 @@ void stcfProceedByMutex() {
 /* Preemptive SJF (STCF) scheduling algorithm */
 void sched_stcf() {
 	/* Handle current tcb */
-
-	// Pause timer	
-	setitimer(ITIMER_PROF, &schedulerTimer, NULL);
 
 	if (proceedState == PROCEEDBYTIMER) { // If interrupted by timer
 		stcfProceedByInterrupt();
@@ -488,6 +498,10 @@ void initScheduler () {
 	//Trigger SIGPROF every TICKSEC + TICKUSEC
 	schedulerTimer.it_value.tv_sec = TICKSEC;
 	schedulerTimer.it_value.tv_usec = TICKUSEC;
+
+	//itimerval to be used when pausing timer
+	pausedTimer.it_value.tv_sec = 0;
+	pausedTimer.it_value.tv_sec = 0;
 
 	//Start timer
 	setitimer(ITIMER_PROF, &schedulerTimer, NULL);
