@@ -424,7 +424,7 @@ void sched_mlfq() {
 	} else if (proceedState == PROCEEDBYJOIN) { //If waiting to join on a thread
 		(*(*currentItem).block).status = BLOCKED;
 	} else { // If current has ended or exited, proceedState == PROCEEDBYFINISH
-		printf("\tProceeding by finish\n");
+	//	printf("\tProceeding by finish\n");
 	}
 
 	
@@ -493,8 +493,8 @@ void sched_mlfq() {
 
 	currentLevel = i;
 	currentItem = rpthread_MLFQ[i];
-	printf("current item: %d\n",currentItem);	
-	printMLFQ();
+	//printf("current item: %d\n",currentItem);	
+	//printMLFQ();
 
 	proceedState = ENDED;
 
